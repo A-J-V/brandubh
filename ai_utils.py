@@ -14,7 +14,8 @@ class GameRecorder:
         self.action_space = []
         self.actions = []
         self.action_probs = []
-        self.v_est = []
+        self.v_est_1 = []
+        self.v_est_0 = []
         self.terminal = []
         self.num_turns = 0
         self.winner = None
@@ -25,7 +26,8 @@ class GameRecorder:
                 len(self.actions) ==
                 len(self.action_probs) ==
                 len(self.player) ==
-                len(self.v_est)), "Game Recording is incomplete"
+                len(self.v_est_1) ==
+                len(self.v_est_0)), "Game Recording is incomplete"
         self.num_turns += 1
 
     def get_td_error(self, vt, vtp, player, winner):
@@ -41,7 +43,7 @@ class GameRecorder:
         td_error = vtp - vt + rewards
         return td_error
 
-    def calculate_gae(self, td_error, gamma=0.99, lambda_=0.90):
+    def calculate_gae(self, td_error, gamma=0.99, lambda_=0.99):
         # Calculate GAE
         gae = []
         gae_t = 0
@@ -60,17 +62,19 @@ class GameRecorder:
         game_record['player'] = self.player
         game_record['action_taken'] = self.actions
         game_record['action_prob'] = self.action_probs
-        game_record['v_est'] = self.v_est
-        game_record['v_est_next'] = game_record['v_est'].shift(-1, fill_value=0)
+        game_record['v_est_1'] = self.v_est_1
+        game_record['v_est_0'] = self.v_est_0
+        game_record['v_est_next_1'] = game_record['v_est_1'].shift(-1, fill_value=0)
+        game_record['v_est_next_0'] = game_record['v_est_0'].shift(-1, fill_value=0)
         game_record['terminal'] = self.terminal
         game_record['winner'] = self.winner
-        game_record['td_error_1'] = self.get_td_error(game_record['v_est'],
-                                                      game_record['v_est_next'],
+        game_record['td_error_1'] = self.get_td_error(game_record['v_est_1'],
+                                                      game_record['v_est_next_1'],
                                                       player=1,
                                                       winner=self.winner,
                                                       )
-        game_record['td_error_0'] = self.get_td_error(game_record['v_est'],
-                                                      game_record['v_est_next'],
+        game_record['td_error_0'] = self.get_td_error(game_record['v_est_0'],
+                                                      game_record['v_est_next_0'],
                                                       player=0,
                                                       winner=self.winner,
                                                       )

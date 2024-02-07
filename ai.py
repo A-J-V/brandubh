@@ -3,63 +3,33 @@ from torch import nn
 import numpy as np
 
 
-class TestAgent(nn.Module):
-    def __init__(self):
-        super().__init__()
+class RandomAI:
+    def __init__(self, player):
+        self.player = player
 
-        self.network = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding='same')
-        self.policy = nn.Sequential(
-            nn.Linear(16*7*7, 32),
-            nn.ReLU(),
-            nn.Linear(32, 24*7*7)
-        )
+    def select_action(self, _, action_space, recorder=None):
+        action_space = action_space.flatten()
+        action_probs = np.where(action_space == 1, 1 / np.sum(action_space), 0)
+        action_selection = np.argmax(np.random.multinomial(1, action_probs))
 
-    def forward(self, x):
-        if len(x.shape) == 3:
-            x = x.unsqueeze(0)
-        x = self.network(x)
-        x = self.policy(x.view(x.size(0), -1))
-        return x
+        if recorder is not None:
+            recorder.actions.append(action_selection)
+            recorder.action_probs.append(action_probs[action_selection])
+            if self.player == 1:
+                recorder.v_est_1.append(0.0)
+            elif self.player == 0:
+                recorder.v_est_0.append(0.0)
 
-    def pred_probs(self, x, action_space):
-        x = self.forward(x)
-        probs = T.softmax(x - x.max(), dim=1)
-        probs = T.where(action_space == 1, probs, T.zeros_like(probs))
-        probs /= T.sum(probs, dim=1, keepdim=True)
+        action_selection = np.unravel_index(action_selection, (24, 7, 7))
+        return action_selection, _
 
-        if T.isnan(probs).any():
-            raise Exception("NaNs detected in pred_probs")
-
-        return probs
-
-    def select_action(self, x, action_space, recorder=None):
-        with T.inference_mode():
-            x = T.from_numpy(x).float().unsqueeze(0)
-            action_space = T.from_numpy(action_space).float().unsqueeze(0)
-            action_space = action_space.view(action_space.shape[0], -1)
-            action_probs = self.pred_probs(x, action_space)
-
-            # torch.multinomial doesn't work, it samples elements with 0.0 probability.
-            # action_selection = T.multinomial(action_probs, 1)
-
-            # The below code replicates the functionality of torch.multinomial() without the bug.
-            action_cdf = T.cumsum(action_probs, dim=1)
-            uniform = T.rand((action_probs.shape[0],))
-            action_selection = (uniform.unsqueeze(0) < action_cdf).long().argmax(1)
-
-            # For debugging
-            selected_prob = action_probs[0, action_selection].item()
-            #
-
-            if recorder is not None:
-                recorder.actions.append(action_selection.item())
-                action_probs = action_probs.squeeze(0).detach().cpu().numpy()
-                recorder.action_probs.append(action_probs[action_selection])
-                recorder.v_est.append(0.0)
-                #recorder.v_est.append(value_pred.detach().cpu().numpy().item())
-
-            action_selection = np.unravel_index(action_selection.item(), (24, 7, 7))
-            return action_selection, selected_prob
+    def predict_value(self, _, recorder=None):
+        if recorder is not None:
+            if self.player == 1:
+                recorder.v_est_1.append(0.0)
+            elif self.player == 0:
+                recorder.v_est_0.append(0.0)
+        return 0.0
 
 
 class TransformerBlock(nn.Module):
@@ -119,7 +89,7 @@ class PpoAttentionAgent(nn.Module):
             nn.Tanh()
         )
 
-    def forward(self, x):
+    def forward(self, x, compute_policy=True):
         batch_size = x.shape[0]
         x = x.reshape((batch_size, 1, 7, 7))
         x = self.conv(x)
@@ -132,45 +102,67 @@ class PpoAttentionAgent(nn.Module):
         x = self.attn(x)
 
         x = x.view(x.size(0), -1)
-        policy = self.policy(x)
         value = self.value(x)
+        if not compute_policy:
+            return value
+        policy = self.policy(x)
         return policy, value
 
-    def pred_probs(self, x, action_space):
-        policy_pred, value_pred = self.forward(x)
+    def predict_probs(self, x, action_space):
+        policy_pred, value_est = self.forward(x)
         probs = T.softmax(policy_pred - policy_pred.max(), dim=1)
-        probs = T.where(action_space == 1, probs, T.zeros_like(probs))
-        probs /= T.sum(probs, dim=1, keepdim=True)
+        legal_probs = T.where(action_space == 1, probs, T.zeros_like(probs))
+        legal_probs /= T.sum(legal_probs, dim=1, keepdim=True)
 
         if T.isnan(probs).any():
+            T.set_printoptions(threshold=10_000)
+            print("### POLICY PRED ###")
+            print(policy_pred)
+            print("### PROBS ###")
+            print(probs)
+            print("### LEGAL PROBS ###")
+            print(legal_probs)
             raise Exception("NaNs detected in pred_probs")
 
-        return probs, value_pred
+        return legal_probs, value_est
 
     def select_action(self, x, action_space, recorder=None):
         with T.inference_mode():
             x = T.from_numpy(x).float().unsqueeze(0)
             action_space = T.from_numpy(action_space).float().unsqueeze(0)
             action_space = action_space.view(action_space.shape[0], -1)
-            action_probs, value_pred = self.pred_probs(x, action_space)
+            action_probs, value_est = self.predict_probs(x, action_space)
 
-            # torch.multinomial doesn't work, it samples elements with 0.0 probability.
-            # action_selection = T.multinomial(action_probs, 1)
+        # torch.multinomial doesn't work, it samples elements with 0.0 probability.
+        # action_selection = T.multinomial(action_probs, 1)
 
-            # The below code replicates the functionality of torch.multinomial() without the bug.
-            action_cdf = T.cumsum(action_probs, dim=1)
-            uniform = T.rand((action_probs.shape[0],))
-            action_selection = (uniform.unsqueeze(0) < action_cdf).long().argmax(1)
+        # The below code replicates the functionality of torch.multinomial() without the bug.
+        action_cdf = T.cumsum(action_probs, dim=1)
+        uniform = T.rand((action_probs.shape[0],))
+        action_selection = (uniform.unsqueeze(0) < action_cdf).long().argmax(1)
 
-            # For debugging
-            selected_prob = action_probs[0, action_selection].item()
-            #
+        # For debugging
+        selected_prob = action_probs[0, action_selection].item()
+        #
 
-            if recorder is not None:
-                recorder.actions.append(action_selection.item())
-                action_probs = action_probs.squeeze(0).detach().cpu().numpy()
-                recorder.action_probs.append(action_probs[action_selection])
-                recorder.v_est.append(value_pred.detach().cpu().numpy().item())
+        if recorder is not None:
+            recorder.actions.append(action_selection.item())
+            action_probs = action_probs.squeeze(0).detach().cpu().numpy()
+            recorder.action_probs.append(action_probs[action_selection])
+            if self.player == 1:
+                recorder.v_est_1.append(value_est.detach().cpu().numpy().item())
+            elif self.player == 0:
+                recorder.v_est_0.append(value_est.detach().cpu().numpy().item())
 
-            action_selection = np.unravel_index(action_selection.item(), (24, 7, 7))
-            return action_selection, selected_prob
+        action_selection = np.unravel_index(action_selection.item(), (24, 7, 7))
+        return action_selection, selected_prob
+
+    def predict_value(self, x, recorder=None):
+        x = T.from_numpy(x).float().unsqueeze(0)
+        value_est = self.forward(x, compute_policy=False)
+        if recorder is not None:
+            if self.player == 1:
+                recorder.v_est_1.append(value_est.detach().cpu().numpy().item())
+            elif self.player == 0:
+                recorder.v_est_0.append(value_est.detach().cpu().numpy().item())
+        return value_est

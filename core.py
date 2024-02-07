@@ -130,18 +130,18 @@ class GameNode:
                     self.board[adjacent_row, adjacent_col] in enemies and
                     self.board[flanker_row, flanker_col] in friends):
                 # There is an adjacent enemy who is flanked. Eliminate it.
-                print("Captured piece at ", adjacent_row, adjacent_col)
                 self.board[adjacent_row, adjacent_col] = 0
 
     def check_terminal(self):
         if (self.board[0, 0] == 3 or
                 self.board[0, 6] == 3 or
                 self.board[6, 0] == 3 or
-                self.board[6, 6] == 3):
-            print("Defenders Win!")
+                self.board[6, 6] == 3 or
+                not np.isin(self.board, [1]).any()):
+            # print("Defenders Win!")
             return 0
         elif not np.isin(self.board, [3]).any():
-            print("Attackers Win!")
+            # print("Attackers Win!")
             return 1
         else:
             return -1
