@@ -126,10 +126,10 @@ class PpoAttentionAgent(nn.Module):
 
         return legal_probs, value_est
 
-    def select_action(self, x, action_space, recorder=None):
+    def select_action(self, x, action_space, recorder=None, device='cuda'):
         with T.inference_mode():
-            x = T.from_numpy(x).float().unsqueeze(0)
-            action_space = T.from_numpy(action_space).float().unsqueeze(0)
+            x = T.from_numpy(x).float().unsqueeze(0).to(device)
+            action_space = T.from_numpy(action_space).float().unsqueeze(0).to(device)
             action_space = action_space.view(action_space.shape[0], -1)
             action_probs, value_est = self.predict_probs(x, action_space)
 
@@ -138,7 +138,7 @@ class PpoAttentionAgent(nn.Module):
 
         # The below code replicates the functionality of torch.multinomial() without the bug.
         action_cdf = T.cumsum(action_probs, dim=1)
-        uniform = T.rand((action_probs.shape[0],))
+        uniform = T.rand((action_probs.shape[0],)).to(device)
         action_selection = (uniform.unsqueeze(0) < action_cdf).long().argmax(1)
 
         # For debugging
@@ -157,8 +157,8 @@ class PpoAttentionAgent(nn.Module):
         action_selection = np.unravel_index(action_selection.item(), (24, 7, 7))
         return action_selection, selected_prob
 
-    def predict_value(self, x, recorder=None):
-        x = T.from_numpy(x).float().unsqueeze(0)
+    def predict_value(self, x, recorder=None, device='cuda'):
+        x = T.from_numpy(x).float().unsqueeze(0).to(device)
         value_est = self.forward(x, compute_policy=False)
         if recorder is not None:
             if self.player == 1:
