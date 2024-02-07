@@ -3,9 +3,9 @@ import numpy as np
 brandubh = """\
 X..A..X
 ...A...
-...D...
+.A...A.
 AADKDAA
-...D...
+...A...
 ...A...
 X..A..X"""
 
@@ -119,6 +119,7 @@ class GameNode:
                 index,
                 player,
                 ):
+        """Capture any enemy pieces adjacent to index."""
         enemies = [-1, 1] if player == 0 else [-1, 2, 3]
         friends = [-1, 2, 3] if player == 0 else [-1, 1]
         directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
