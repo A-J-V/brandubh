@@ -7,7 +7,11 @@ class RandomAI:
     def __init__(self, player):
         self.player = player
 
-    def select_action(self, _, action_space, recorder=None):
+    def to(self, device=None):
+        # Dummy function
+        pass
+
+    def select_action(self, _, action_space, recorder=None, device=None):
         action_space = action_space.flatten()
         action_probs = np.where(action_space == 1, 1 / np.sum(action_space), 0)
         action_selection = np.argmax(np.random.multinomial(1, action_probs))
@@ -23,7 +27,7 @@ class RandomAI:
         action_selection = np.unravel_index(action_selection, (24, 7, 7))
         return action_selection, _
 
-    def predict_value(self, _, recorder=None):
+    def predict_value(self, _, recorder=None, device=None):
         if recorder is not None:
             if self.player == 1:
                 recorder.v_est_1.append(0.0)
@@ -44,8 +48,8 @@ class TransformerBlock(nn.Module):
         )
         self.norm2 = nn.LayerNorm(n_dims)
 
-    def forward(self, x):
-        attn_out, _ = self.attention(x, x, x)
+    def forward(self, x, mask):
+        attn_out, _ = self.attention(x, x, x, key_padding_mask=mask)
         x = self.norm1(attn_out + x)
         mlp_out = self.mlp(x)
         x = self.norm2(mlp_out + x)
@@ -63,19 +67,13 @@ class PpoAttentionAgent(nn.Module):
             for j in range(position_tensor.shape[-2]):
                 position_tensor[0, i, j] = i
                 position_tensor[1, i, j] = j
-        position_tensor = position_tensor / 10
+        position_tensor = position_tensor / 7
         self.position_tensor = position_tensor.unsqueeze(0)
 
-        self.conv = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=(3, 3), stride=1, padding='same'),
-            nn.ReLU(),
-            nn.Conv2d(32, 62, kernel_size=(3, 3), stride=1, padding='same'),
-            nn.ReLU(),
-        )
+        self.embedding = nn.Embedding(5, 62, padding_idx=0)
 
-        self.attn = nn.Sequential(
-            TransformerBlock(64, 2),
-        )
+        self.attn = TransformerBlock(64, 1)
+        self.attn2 = TransformerBlock(64, 1)
 
         self.policy = nn.Sequential(
             nn.Linear(64 * 7 * 7, 512),
@@ -91,15 +89,18 @@ class PpoAttentionAgent(nn.Module):
 
     def forward(self, x, compute_policy=True):
         batch_size = x.shape[0]
-        x = x.reshape((batch_size, 1, 7, 7))
-        x = self.conv(x)
+        x = x.long().view(batch_size, -1)
+        mask = T.where(x == 0, 1, 0).float()
+        x = self.embedding(x)
+        x = x.view((batch_size, 62, 7, 7))
         batch_position = self.position_tensor.to(x.device.type).expand(x.shape[0], 2, 7, 7)
         x = T.cat((batch_position, x), dim=1)
 
         x = x.view(x.shape[0], x.shape[1], x.shape[2] ** 2)
         x = x.permute(0, 2, 1)
 
-        x = self.attn(x)
+        x = self.attn(x, mask)
+        x = self.attn2(x, mask)
 
         x = x.view(x.size(0), -1)
         value = self.value(x)
