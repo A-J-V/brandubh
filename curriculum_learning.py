@@ -45,5 +45,5 @@ def get_attacker_curriculum(n=1):
     curriculum_game = core.GameNode(board_string)
     action_space = curriculum_game.get_actions((attacker_r, attacker_c))
     action_selected = random.choice(np.argwhere(action_space==1)).item()
-    curriculum_game.take_action((attacker_r, attacker_c), action_selected, player=1)
+    curriculum_game.take_action(action_selected, player=1)
     return curriculum_game
