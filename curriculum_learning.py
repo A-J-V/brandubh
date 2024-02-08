@@ -2,11 +2,11 @@ import core
 import random
 import numpy as np
 
-CHAR_MAP = {-1: 'X',
-            0: '.',
+CHAR_MAP = {0: '.',
             1: 'A',
             2: 'D',
             3: 'K',
+            4: 'X',
             }
 
 
@@ -23,10 +23,10 @@ def np_to_string(board):
 def get_attacker_curriculum(n=1):
     # Only implemented for n=1 currently
     curriculum_board = np.zeros((7, 7), dtype=int)
-    curriculum_board[0, 0] = -1
-    curriculum_board[0, 6] = -1
-    curriculum_board[6, 0] = -1
-    curriculum_board[6, 6] = -1
+    curriculum_board[0, 0] = 4
+    curriculum_board[0, 6] = 4
+    curriculum_board[6, 0] = 4
+    curriculum_board[6, 6] = 4
 
     king_r, king_c = random.randint(1, 5), random.randint(1, 5)
     curriculum_board[king_r, king_c] = 3
@@ -45,5 +45,5 @@ def get_attacker_curriculum(n=1):
     curriculum_game = core.GameNode(board_string)
     action_space = curriculum_game.get_actions((attacker_r, attacker_c))
     action_selected = random.choice(np.argwhere(action_space==1)).item()
-    curriculum_game.make_move((attacker_r, attacker_c), action_selected, player=1)
+    curriculum_game.take_action((attacker_r, attacker_c), action_selected, player=1)
     return curriculum_game
