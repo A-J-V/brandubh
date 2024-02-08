@@ -18,21 +18,28 @@ char_to_num = {'X': 4,
 
 
 class GameNode:
+    node_count = 0
     BLANK = 0
     ATTACKER = 1
     DEFENDER = 2
     KING = 3
     CORNER = 4
 
-    def __init__(self, board=brandubh):
+    def __init__(self, board=brandubh, parent=None):
         if isinstance(board, str):
             self.board = np.array([[char_to_num[char] for char in list(c)]
                                    for c in board.splitlines()]
                                   )
         elif isinstance(board, np.ndarray):
-            self.board = board
+            self.board = np.array(board)
         else:
             raise Exception("Unrecognized board type")
+
+        # These are used for MCTS
+        self.visits = 0
+        self.value = 0
+        self.children = []
+        self.parent = parent
 
     def get_action_space(self, player=None):
         action_space = np.zeros((24, 7, 7))
@@ -159,8 +166,14 @@ class GameNode:
         else:
             return -1
 
+    def walk_back(self):
+        print(self.board)
+        if self.parent is not None:
+            self.parent.walk_back()
+
     def step(self, action, player):
-        next_node = GameNode(self.board)
+        next_node = GameNode(board=self.board, parent=self)
         next_index = next_node.take_action(action, player)
         next_node.capture(next_index, player)
+        self.children.append(next_node)
         return next_node
