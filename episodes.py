@@ -15,9 +15,9 @@ class Standard:
                  attacker=None,
                  defender=None,
                  device='cpu',
-                 id=0,
+                 uid=0,
                  ):
-        self.id = id
+        self.uid = uid
         self.game = GameNode()
         self.device = device
         if attacker is None:
@@ -79,5 +79,5 @@ class Standard:
                 self.recorder.terminal.append(0)
             self.recorder.tick()
         if self.recorder is not None:
-            self.recorder.record().to_csv(f"./game_records/game_{self.id}.csv", index=False)
+            self.recorder.record().to_csv(f"./game_records/game_{self.uid}.csv", index=False)
         return terminal
