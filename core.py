@@ -24,7 +24,7 @@ class GameNode:
     KING = 3
     CORNER = 4
 
-    def __init__(self, board):
+    def __init__(self, board=brandubh):
         if isinstance(board, str):
             self.board = np.array([[char_to_num[char] for char in list(c)]
                                    for c in board.splitlines()]
