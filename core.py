@@ -1,22 +1,14 @@
 import numpy as np
 
-# brandubh = """\
-# X..A..X
-# ...A...
-# ...D...
-# AADKDAA
-# ...D...
-# ...A...
-# X..A..X"""
-
 brandubh = """\
-X.....X
-A.KA...
-.......
-.......
-.......
-.......
-X.....X"""
+X..A..X
+...A...
+...D...
+AADKDAA
+...D...
+...A...
+X..A..X"""
+
 
 char_to_num = {'X': 4,
                '.': 0,
@@ -31,6 +23,7 @@ class GameNode:
     DEFENDER = 2
     KING = 3
     CORNER = 4
+
     def __init__(self, board):
         if isinstance(board, str):
             self.board = np.array([[char_to_num[char] for char in list(c)]
@@ -97,11 +90,11 @@ class GameNode:
         # Cache would go here if updating a cache of legal moves.
         return legal_moves
 
-    def make_move(self,
-                  index,
-                  action,
-                  player=None,
-                  ):
+    def take_action(self,
+                    action,
+                    player=None,
+                    ):
+        move, row, col = action
         if player == 1:
             legal_pieces = [self.ATTACKER]
         elif player == 0:
@@ -110,28 +103,28 @@ class GameNode:
             legal_pieces = [self.ATTACKER, self.DEFENDER, self.KING]
 
         # Should be upgraded to a cache in the future
-        if (self.board[index[0], index[1]] not in legal_pieces or
-                self.get_actions(index)[action] == 0):
+        if (self.board[row, col] not in legal_pieces or
+                self.get_actions((row, col))[move] == 0):
             print(self.board)
-            print(self.board[index[0], index[1]])
-            print(index)
-            print(action)
-            print(self.get_actions(index))
+            print(self.board[row, col])
+            print(row, col)
+            print(move)
+            print(self.get_actions((row, col)))
             raise Exception("Invalid action")
 
         # Get the move axis, direction, and number of tiles.
-        axis = 0 if action < 12 else 1
-        direction = 1 if action > 17 or (6 <= action <= 11) else -1
-        num = (action % 6) + 1
+        axis = 0 if move < 12 else 1
+        direction = 1 if move > 17 or (6 <= move <= 11) else -1
+        num = (move % 6) + 1
 
         # Get the new index to which the piece at `index` will move.
-        new_index = list(index)
+        new_index = [row, col]
         new_index[axis] += direction * num
         new_index = tuple(new_index)
 
         # Make the move
-        self.board[new_index[0], new_index[1]] = self.board[index[0], index[1]]
-        self.board[index[0], index[1]] = 0
+        self.board[new_index[0], new_index[1]] = self.board[row, col]
+        self.board[row, col] = 0
         return new_index
 
     def capture(self,
@@ -166,8 +159,8 @@ class GameNode:
         else:
             return -1
 
-    def step(self, index, action, player):
+    def step(self, action, player):
         next_node = GameNode(self.board)
-        next_index = next_node.make_move(index, action)
+        next_index = next_node.take_action(action, player)
         next_node.capture(next_index, player)
         return next_node
