@@ -11,7 +11,6 @@ from tqdm import tqdm
 
 class Standard:
     def __init__(self,
-                 recorded: bool,
                  attacker=None,
                  defender=None,
                  device='cpu',
@@ -28,10 +27,8 @@ class Standard:
             self.defender = ai.RandomAI(player=0)
         else:
             self.defender = defender.to(self.device)
-        if recorded:
-            self.recorder = ai_utils.GameRecorder()
-        else:
-            self.recorder = None
+        self.recorder = ai_utils.GameRecorder()
+
 
     def play(self):
         player = 1
