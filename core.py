@@ -1,15 +1,24 @@
 import numpy as np
 
-brandubh = """\
-X..A..X
-...A...
-.A...A.
-AADKDAA
-...A...
-...A...
-X..A..X"""
+# brandubh = """\
+# X..A..X
+# ...A...
+# ...D...
+# AADKDAA
+# ...D...
+# ...A...
+# X..A..X"""
 
-char_to_num = {'X': -1,
+brandubh = """\
+X.....X
+A.KA...
+.......
+.......
+.......
+.......
+X.....X"""
+
+char_to_num = {'X': 4,
                '.': 0,
                'A': 1,
                'D': 2,
@@ -17,18 +26,28 @@ char_to_num = {'X': -1,
 
 
 class GameNode:
+    BLANK = 0
+    ATTACKER = 1
+    DEFENDER = 2
+    KING = 3
+    CORNER = 4
     def __init__(self, board):
-        self.board = np.array([[char_to_num[char] for char in list(c)]
-                               for c in board.splitlines()]
-                              )
+        if isinstance(board, str):
+            self.board = np.array([[char_to_num[char] for char in list(c)]
+                                   for c in board.splitlines()]
+                                  )
+        elif isinstance(board, np.ndarray):
+            self.board = board
+        else:
+            raise Exception("Unrecognized board type")
 
     def get_action_space(self, player=None):
         action_space = np.zeros((24, 7, 7))
         for i in range(7):
             for j in range(7):
-                if player == 1 and self.board[i, j] != 1:
+                if player == 1 and self.board[i, j] != self.ATTACKER:
                     continue
-                elif player == 0 and self.board[i, j] not in [2, 3]:
+                elif player == 0 and self.board[i, j] not in [self.DEFENDER, self.KING]:
                     continue
                 else:
                     action_space[:, i, j] = self.get_actions((i, j))
@@ -36,7 +55,7 @@ class GameNode:
 
     def get_actions(self,
                     index):
-        if self.board[index[0], index[1]] <= 0:
+        if self.board[index[0], index[1]] in [self.BLANK, self.CORNER]:
             return np.zeros(24)
         else:
             legal_moves = np.zeros(24)
@@ -49,10 +68,10 @@ class GameNode:
         tmp_index = [init_row, init_col]
 
         # Check restricted tiles
-        if self.board[index[0], index[1]] != 3:
-            restrictions = [-1, 1, 2, 3]
+        if self.board[index[0], index[1]] != self.KING:
+            restrictions = [self.ATTACKER, self.DEFENDER, self.KING, self.CORNER]
         else:
-            restrictions = [1, 2, 3]
+            restrictions = [self.ATTACKER, self.DEFENDER, self.KING]
 
         for k in range(4):
             axis = dx[k]
@@ -84,11 +103,11 @@ class GameNode:
                   player=None,
                   ):
         if player == 1:
-            legal_pieces = [1]
+            legal_pieces = [self.ATTACKER]
         elif player == 0:
-            legal_pieces = [2, 3]
+            legal_pieces = [self.DEFENDER, self.KING]
         else:
-            legal_pieces = [1, 2, 3]
+            legal_pieces = [self.ATTACKER, self.DEFENDER, self.KING]
 
         # Should be upgraded to a cache in the future
         if (self.board[index[0], index[1]] not in legal_pieces or
@@ -120,8 +139,8 @@ class GameNode:
                 player,
                 ):
         """Capture any enemy pieces adjacent to index."""
-        enemies = [-1, 1] if player == 0 else [-1, 2, 3]
-        friends = [-1, 2, 3] if player == 0 else [-1, 1]
+        enemies = [self.ATTACKER, self.CORNER] if player == 0 else [self.DEFENDER, self.KING, self.CORNER]
+        friends = [self.DEFENDER, self.KING, self.CORNER] if player == 0 else [self.ATTACKER, self.CORNER]
         directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
         for dr, dc in directions:
             adjacent_row, adjacent_col = index[0] + dr, index[1] + dc
@@ -131,18 +150,24 @@ class GameNode:
                     self.board[adjacent_row, adjacent_col] in enemies and
                     self.board[flanker_row, flanker_col] in friends):
                 # There is an adjacent enemy who is flanked. Eliminate it.
-                self.board[adjacent_row, adjacent_col] = 0
+                self.board[adjacent_row, adjacent_col] = self.BLANK
 
     def check_terminal(self):
         if (self.board[0, 0] == 3 or
                 self.board[0, 6] == 3 or
                 self.board[6, 0] == 3 or
                 self.board[6, 6] == 3 or
-                not np.isin(self.board, [1]).any()):
+                not np.isin(self.board, [self.ATTACKER]).any()):
             # print("Defenders Win!")
             return 0
-        elif not np.isin(self.board, [3]).any():
+        elif not np.isin(self.board, [self.KING]).any():
             # print("Attackers Win!")
             return 1
         else:
             return -1
+
+    def step(self, index, action, player):
+        next_node = GameNode(self.board)
+        next_index = next_node.make_move(index, action)
+        next_node.capture(next_index, player)
+        return next_node
