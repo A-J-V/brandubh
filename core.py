@@ -26,7 +26,7 @@ class GameNode:
     KING = 3
     CORNER = 4
 
-    def __init__(self, board=brandubh, parent=None):
+    def __init__(self, player=1, board=brandubh, parent=None):
         if isinstance(board, str):
             self.board = np.array([[char_to_num[char] for char in list(c)]
                                    for c in board.splitlines()]
@@ -36,9 +36,16 @@ class GameNode:
         else:
             raise Exception("Unrecognized board type")
 
-        # These will be immediately updated after creation by the parent node
-        self.is_terminal = -1
-        self.action_space = None
+        # Whose turn is it in this node?
+        self.player = player
+
+        # If a child, the parent will quickly reassign these; otherwise, they're assigned here.
+        if parent is None:
+            self.is_terminal = -1
+            self.action_space = self.get_action_space(player)
+        else:
+            self.is_terminal = None
+            self.action_space = None
 
         # These are used for MCTS
         self.visits = 0
@@ -46,8 +53,7 @@ class GameNode:
         self.children = []
         self.parent = parent
 
-    @property
-    def terminal(self):
+    def is_terminal(self):
         if self.is_terminal is None:
             raise Exception("GameNode's is_terminal property is not set")
         else:
@@ -183,10 +189,12 @@ class GameNode:
         if self.parent is not None:
             self.parent.walk_back()
 
-    def step(self, action, player):
-        next_node = GameNode(board=self.board, parent=self)
-        next_index = next_node.take_action(action, player)
-        next_node.capture(next_index, player)
+    def step(self, action):
+        next_node = GameNode(player=0 if self.player == 1 else 1,
+                             board=self.board,
+                             parent=self)
+        next_index = next_node.take_action(action, self.player)
+        next_node.capture(next_index, self.player)
         next_node.is_terminal = next_node.check_terminal()
         self.children.append(next_node)
         return next_node
