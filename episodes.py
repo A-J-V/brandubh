@@ -29,10 +29,9 @@ class Standard:
             self.defender = defender.to(self.device)
         self.recorder = ai_utils.GameRecorder()
 
-
     def play(self):
         player = 1
-        while self.game.check_terminal() == -1:
+        while self.game.is_terminal == -1:
             action_space = self.game.get_action_space(player)
             # First check whether this player has any moves.
             # If not, the last turn was actually terminal, so
@@ -67,7 +66,7 @@ class Standard:
             else:
                 raise Exception("Unknown player")
             self.game = self.game.step(action_selected, player)
-            terminal = self.game.check_terminal()
+            terminal = self.game.is_terminal
             player = 1 if player == 0 else 0
             if terminal != -1:
                 self.recorder.terminal.append(1)
