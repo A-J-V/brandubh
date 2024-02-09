@@ -1,5 +1,6 @@
 import numpy as np
 
+
 brandubh = """\
 X..A..X
 ...A...
@@ -35,11 +36,22 @@ class GameNode:
         else:
             raise Exception("Unrecognized board type")
 
+        # These will be immediately updated after creation by the parent node
+        self.is_terminal = -1
+        self.action_space = None
+
         # These are used for MCTS
         self.visits = 0
         self.value = 0
         self.children = []
         self.parent = parent
+
+    @property
+    def terminal(self):
+        if self.is_terminal is None:
+            raise Exception("GameNode's is_terminal property is not set")
+        else:
+            return self.is_terminal
 
     def get_action_space(self, player=None):
         action_space = np.zeros((24, 7, 7))
@@ -175,5 +187,6 @@ class GameNode:
         next_node = GameNode(board=self.board, parent=self)
         next_index = next_node.take_action(action, player)
         next_node.capture(next_index, player)
+        next_node.is_terminal = next_node.check_terminal()
         self.children.append(next_node)
         return next_node
