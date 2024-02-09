@@ -48,8 +48,7 @@ class Trainer:
             for i in tqdm(range(self.num_games)):
                 # Open a new environment and run through the game
                 if self.mode == 'standard':
-                    env = episodes.Standard(recorded=True,
-                                            attacker=self.attacker,
+                    env = episodes.Standard(attacker=self.attacker,
                                             device=self.device,
                                             uid=i)
                     terminal = env.play()
