@@ -30,34 +30,19 @@ class Standard:
         self.recorder = ai_utils.GameRecorder()
 
     def play(self):
-        player = 1
         while self.game.is_terminal == -1:
-            action_space = self.game.get_action_space(player)
-            # First check whether this player has any moves.
-            # If not, the last turn was actually terminal, so
-            # update the record and end the game.
-            if np.sum(action_space) == 0:
-                self.recorder.terminal[-1] = 1
-                self.recorder.winner = 1 if player == 0 else 0
-                terminal = 1 if player == 0 else 0
-                if player == 1:
-                    print("Attackers have no moves--defenders win!")
-                elif player == 0:
-                    print("Defenders have no moves--attackers win!")
-                else:
-                    raise Exception("Invalid Player!")
-                break
+            action_space = self.game.action_space
 
-            self.recorder.player.append(player)
+            self.recorder.player.append(self.game.player)
             self.recorder.state.append(self.game.board.flatten())
             self.recorder.action_space.append(action_space.flatten())
-            if player == 1:
+            if self.game.player == 1:
                 action_selected, prob = self.attacker.select_action(self.game.board,
                                                                     action_space,
                                                                     self.recorder,
                                                                     device=self.device)
                 _ = self.defender.predict_value(self.game.board, self.recorder, device=self.device)
-            elif player == 0:
+            elif self.game.player == 0:
                 action_selected, prob = self.defender.select_action(self.game.board,
                                                                     action_space,
                                                                     self.recorder,
@@ -65,9 +50,8 @@ class Standard:
                 _ = self.attacker.predict_value(self.game.board, self.recorder, device=self.device)
             else:
                 raise Exception("Unknown player")
-            self.game = self.game.step(action_selected, player)
+            self.game = self.game.step(action_selected)
             terminal = self.game.is_terminal
-            player = 1 if player == 0 else 0
             if terminal != -1:
                 self.recorder.terminal.append(1)
                 self.recorder.winner = terminal
@@ -76,4 +60,5 @@ class Standard:
             self.recorder.tick()
         if self.recorder is not None:
             self.recorder.record().to_csv(f"./game_records/game_{self.uid}.csv", index=False)
+        #self.game.walk_back()
         return terminal
