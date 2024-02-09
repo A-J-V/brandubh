@@ -196,5 +196,6 @@ class GameNode:
         next_index = next_node.take_action(action, self.player)
         next_node.capture(next_index, self.player)
         next_node.is_terminal = next_node.check_terminal()
+        next_node.action_space = next_node.get_action_space(next_node.player)
         self.children.append(next_node)
         return next_node
