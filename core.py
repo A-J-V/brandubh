@@ -41,11 +41,13 @@ class GameNode:
 
         # If a child, the parent will quickly reassign these; otherwise, they're assigned here.
         if parent is None:
-            self.is_terminal = -1
+            self.terminal = -1
             self.action_space = self.get_action_space(player)
+            self.unexpanded_children = np.argwhere(self.action_space == 1)
         else:
-            self.is_terminal = None
+            self.terminal = None
             self.action_space = None
+            self.unexpanded_children = None
 
         # These are used for MCTS
         self.visits = 0
@@ -54,10 +56,10 @@ class GameNode:
         self.parent = parent
 
     def is_terminal(self):
-        if self.is_terminal is None:
+        if self.terminal is None:
             raise Exception("GameNode's is_terminal property is not set")
         else:
-            return self.is_terminal
+            return self.terminal
 
     def get_action_space(self, player=None):
         action_space = np.zeros((24, 7, 7))
@@ -176,16 +178,17 @@ class GameNode:
                 self.board[6, 0] == 3 or
                 self.board[6, 6] == 3 or
                 not np.isin(self.board, [self.ATTACKER]).any()):
-            # print("Defenders Win!")
+            #print("Defenders Win!")
             return 0
         elif not np.isin(self.board, [self.KING]).any():
-            # print("Attackers Win!")
+            #print("Attackers Win!")
             return 1
         else:
             return -1
 
     def walk_back(self):
         print(self.board)
+        print(self.value)
         if self.parent is not None:
             self.parent.walk_back()
 
@@ -195,7 +198,15 @@ class GameNode:
                              parent=self)
         next_index = next_node.take_action(action, self.player)
         next_node.capture(next_index, self.player)
-        next_node.is_terminal = next_node.check_terminal()
+        next_node.terminal = next_node.check_terminal()
         next_node.action_space = next_node.get_action_space(next_node.player)
+        next_node.unexpanded_children = np.argwhere(next_node.action_space == 1)
         self.children.append(next_node)
         return next_node
+
+    def backpropagate(self, value):
+        """Recursively assign values up through the game tree."""
+        self.visits += 1
+        self.value += value
+        if self.parent is not None:
+            self.parent.backpropagate(-value)
