@@ -19,7 +19,6 @@ char_to_num = {'X': 4,
 
 
 class GameNode:
-    node_count = 0
     BLANK = 0
     ATTACKER = 1
     DEFENDER = 2
@@ -27,7 +26,6 @@ class GameNode:
     CORNER = 4
 
     def __init__(self, player=1, board=brandubh, parent=None):
-        self.node_count += 1
         if isinstance(board, str):
             self.board = np.array([[char_to_num[char] for char in list(c)]
                                    for c in board.splitlines()]
@@ -203,8 +201,6 @@ class GameNode:
         print("Player: ", self.player)
         if self.parent is not None:
             self.parent.walk_back()
-        else:
-            print(GameNode.node_count)
 
     def step(self, action):
         next_node = GameNode(player=0 if self.player == 1 else 1,
