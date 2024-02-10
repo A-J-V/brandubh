@@ -27,6 +27,7 @@ class GameNode:
     CORNER = 4
 
     def __init__(self, player=1, board=brandubh, parent=None):
+        self.node_count += 1
         if isinstance(board, str):
             self.board = np.array([[char_to_num[char] for char in list(c)]
                                    for c in board.splitlines()]
@@ -43,7 +44,7 @@ class GameNode:
         if parent is None:
             self.terminal = -1
             self.action_space = self.get_action_space(player)
-            self.unexpanded_children = np.argwhere(self.action_space == 1)
+            self.unexpanded_children = [tuple(action) for action in np.argwhere(self.action_space == 1)]
         else:
             self.terminal = None
             self.action_space = None
@@ -55,7 +56,15 @@ class GameNode:
         self.children = []
         self.parent = parent
 
+    @property
     def is_terminal(self):
+        return False if self.terminal == -1 else True
+
+    @property
+    def is_fully_expanded(self):
+        return True if len(self.unexpanded_children) == 0 else False
+
+    def get_terminal(self):
         if self.terminal is None:
             raise Exception("GameNode's is_terminal property is not set")
         else:
@@ -183,14 +192,19 @@ class GameNode:
         elif not np.isin(self.board, [self.KING]).any():
             #print("Attackers Win!")
             return 1
+        elif len(self.unexpanded_children) == 0:
+            return 1 if self.player == 0 else 1
         else:
             return -1
 
     def walk_back(self):
         print(self.board)
-        print(self.value)
+
+        print("Player: ", self.player)
         if self.parent is not None:
             self.parent.walk_back()
+        else:
+            print(GameNode.node_count)
 
     def step(self, action):
         next_node = GameNode(player=0 if self.player == 1 else 1,
@@ -198,15 +212,32 @@ class GameNode:
                              parent=self)
         next_index = next_node.take_action(action, self.player)
         next_node.capture(next_index, self.player)
-        next_node.terminal = next_node.check_terminal()
         next_node.action_space = next_node.get_action_space(next_node.player)
-        next_node.unexpanded_children = np.argwhere(next_node.action_space == 1)
+        next_node.unexpanded_children = [tuple(action) for action in np.argwhere(next_node.action_space == 1)]
+        next_node.terminal = next_node.check_terminal()
         self.children.append(next_node)
         return next_node
 
+    def clone(self):
+        clone = GameNode(player=self.player,
+                         board=self.board,
+                         parent=None)
+        clone.terminal = clone.check_terminal()
+        return clone
+
     def backpropagate(self, value):
-        """Recursively assign values up through the game tree."""
+        """Recursively update values up through the game tree."""
         self.visits += 1
         self.value += value
         if self.parent is not None:
-            self.parent.backpropagate(-value)
+            self.parent.backpropagate(value)
+
+    def reset_mcts(self):
+        """
+        A helper function to reset the variables used in MCTS.
+        This is used to clean the best child chosen at the end of MCTS.
+        """
+        self.visits = 0
+        self.value = 0
+        self.children = []
+        self.unexpanded_children = [tuple(action) for action in np.argwhere(self.action_space == 1)]

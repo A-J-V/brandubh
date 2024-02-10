@@ -2,6 +2,7 @@ import ai
 import ai_utils
 from core import *
 import curriculum_learning
+import mcts
 
 import os
 import torch
@@ -30,7 +31,7 @@ class Standard:
         self.recorder = ai_utils.GameRecorder()
 
     def play(self):
-        while self.game.is_terminal == -1:
+        while self.game.terminal == -1:
             action_space = self.game.action_space
 
             self.recorder.player.append(self.game.player)
@@ -51,7 +52,7 @@ class Standard:
             else:
                 raise Exception("Unknown player")
             self.game = self.game.step(action_selected)
-            terminal = self.game.is_terminal
+            terminal = self.game.terminal
             if terminal != -1:
                 self.recorder.terminal.append(1)
                 self.recorder.winner = terminal
@@ -62,3 +63,15 @@ class Standard:
             self.recorder.record().to_csv(f"./game_records/game_{self.uid}.csv", index=False)
         #self.game.walk_back()
         return terminal
+
+
+class MCTSGame:
+    """An episode designed to test and debug MCTS."""
+    def __init__(self, num_iter=2000):
+        self.game = GameNode()
+        self.num_iter = num_iter
+
+    def play(self):
+        while not self.game.is_terminal:
+            self.game = mcts.run_mcts(self.game, num_iter=self.num_iter)
+        self.game.walk_back()
