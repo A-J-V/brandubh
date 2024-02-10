@@ -1,4 +1,5 @@
 import numpy as np
+from mcts import ucb1
 
 
 brandubh = """\
@@ -25,7 +26,7 @@ class GameNode:
     KING = 3
     CORNER = 4
 
-    def __init__(self, player=1, board=brandubh, parent=None):
+    def __init__(self, player=1, board=brandubh, parent=None, action_index=None):
         if isinstance(board, str):
             self.board = np.array([[char_to_num[char] for char in list(c)]
                                    for c in board.splitlines()]
@@ -38,17 +39,21 @@ class GameNode:
         # Whose turn is it in this node?
         self.player = player
 
+        # What action did the parent choose that spawned this Node?
+        self.action_index = action_index
+
         # If a child, the parent will quickly reassign these; otherwise, they're assigned here.
         if parent is None:
-            self.terminal = -1
-            self.action_space = self.get_action_space(player)
-            self.unexpanded_children = [tuple(action) for action in np.argwhere(self.action_space == 1)]
+            self.winner = -1
+            self.action_space = self.get_action_space(player).flatten()
+            self.unexpanded_children = [action.item() for action in np.argwhere(self.action_space == 1)]
         else:
-            self.terminal = None
+            self.winner = None
             self.action_space = None
             self.unexpanded_children = None
 
         # These are used for MCTS
+        self.policy = None
         self.visits = 0
         self.value = 0
         self.children = []
@@ -56,17 +61,17 @@ class GameNode:
 
     @property
     def is_terminal(self):
-        return False if self.terminal == -1 else True
+        return False if self.winner == -1 else True
 
     @property
     def is_fully_expanded(self):
         return True if len(self.unexpanded_children) == 0 else False
 
-    def get_terminal(self):
-        if self.terminal is None:
+    def get_winner(self):
+        if self.winner is None:
             raise Exception("GameNode's is_terminal property is not set")
         else:
-            return self.terminal
+            return self.winner
 
     def get_action_space(self, player=None):
         action_space = np.zeros((24, 7, 7))
@@ -128,7 +133,7 @@ class GameNode:
                     action,
                     player=None,
                     ):
-        move, row, col = action
+        move, row, col = np.unravel_index(action, (24, 7, 7))
         if player == 1:
             legal_pieces = [self.ATTACKER]
         elif player == 0:
@@ -179,7 +184,7 @@ class GameNode:
                 # There is an adjacent enemy who is flanked. Eliminate it.
                 self.board[adjacent_row, adjacent_col] = self.BLANK
 
-    def check_terminal(self):
+    def check_winner(self):
         if (self.board[0, 0] == 3 or
                 self.board[0, 6] == 3 or
                 self.board[6, 0] == 3 or
@@ -205,20 +210,23 @@ class GameNode:
     def step(self, action):
         next_node = GameNode(player=0 if self.player == 1 else 1,
                              board=self.board,
-                             parent=self)
+                             parent=self,
+                             action_index=action)
         next_index = next_node.take_action(action, self.player)
         next_node.capture(next_index, self.player)
-        next_node.action_space = next_node.get_action_space(next_node.player)
-        next_node.unexpanded_children = [tuple(action) for action in np.argwhere(next_node.action_space == 1)]
-        next_node.terminal = next_node.check_terminal()
+        next_node.action_space = next_node.get_action_space(next_node.player).flatten()
+        next_node.unexpanded_children = [action.item() for action in np.argwhere(next_node.action_space == 1)]
+        next_node.winner = next_node.check_winner()
         self.children.append(next_node)
         return next_node
 
+    # The below methods are used exclusively for MCTS
     def clone(self):
         clone = GameNode(player=self.player,
                          board=self.board,
-                         parent=None)
-        clone.terminal = clone.check_terminal()
+                         parent=None,
+                         action_index=self.action_index)
+        clone.winner = clone.check_winner()
         return clone
 
     def backpropagate(self, value):
@@ -236,4 +244,4 @@ class GameNode:
         self.visits = 0
         self.value = 0
         self.children = []
-        self.unexpanded_children = [tuple(action) for action in np.argwhere(self.action_space == 1)]
+        self.unexpanded_children = [action.item() for action in np.argwhere(self.action_space == 1)]
