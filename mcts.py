@@ -23,7 +23,7 @@ def argmax(lst: list):
     return random.choice(ties)
 
 
-def ucb1(node, c: float = 5.0):
+def ucb1(node, c: float = 3.0):
     """Calculate the UCB1 value"""
     if node.visits == 0:
         return float('inf')
@@ -67,17 +67,15 @@ def rollout(node, caller):
         except Exception as e:
             print(np.sum(rollout_node.action_space))
             print(rollout_node.unexpanded_children)
-            print(e)
+            raise e
 
         rollout_node = rollout_node.step(action)
 
-    # The player of the terminal node's node.player attribute is the loser.
-    # If the initiating node's player == the terminal node's player, that player lost.
-    # Backprop a value accordingly. ??????????????
-    if caller == rollout_node.player:
-        node.backpropagate(value=-1)
-    else:
+    # Backprop the reward up the game tree based on whether the caller who started MCTS won the rollout.
+    if caller == rollout_node.winner:
         node.backpropagate(value=1)
+    else:
+        node.backpropagate(value=-1)
 
 
 def best_child(node):
@@ -86,21 +84,30 @@ def best_child(node):
     max_visit_index = argmax(visit_counts)
     best = node.children[max_visit_index]
     best.reset_mcts()
-    print(visit_counts)
     return best
 
 
 def run_mcts(root_node, num_iter):
+    policy_counts = np.zeros_like(root_node.action_space)
     for iteration in range(num_iter):
         # 1) Selection
         node = root_node
         while not node.is_terminal and node.is_fully_expanded:
+            need_policy = True if node == root_node else False
             node = select_node(node)
+            if need_policy:
+                policy_counts[node.action_index] += 1
 
         # 2) Expansion
         if not node.is_terminal and not node.is_fully_expanded:
+            need_policy = True if node == root_node else False
             node = expand_child(node)
+            if need_policy:
+                policy_counts[node.action_index] += 1
 
         # 3) Simulation and Backpropagation
         rollout(node, caller=root_node.player)
+    policy = policy_counts / num_iter
+    root_node.policy = policy
+
     return best_child(root_node)
