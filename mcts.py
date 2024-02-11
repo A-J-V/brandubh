@@ -23,7 +23,7 @@ def argmax(lst: list):
     return random.choice(ties)
 
 
-def ucb1(node, c: float = 3.0):
+def ucb1(node, c: float = 2.0):
     """Calculate the UCB1 value"""
     if node.visits == 0:
         return float('inf')
@@ -84,10 +84,13 @@ def best_child(node):
     max_visit_index = argmax(visit_counts)
     best = node.children[max_visit_index]
     best.reset_mcts()
+    print(visit_counts)
     return best
 
 
-def run_mcts(root_node, num_iter):
+def run_mcts(root_node, base_iter):
+    num_legal_moves = np.sum(root_node.action_space == 1)
+    num_iter = base_iter * num_legal_moves
     policy_counts = np.zeros_like(root_node.action_space)
     for iteration in range(num_iter):
         # 1) Selection
@@ -109,5 +112,4 @@ def run_mcts(root_node, num_iter):
         rollout(node, caller=root_node.player)
     policy = policy_counts / num_iter
     root_node.policy = policy
-
     return best_child(root_node)
