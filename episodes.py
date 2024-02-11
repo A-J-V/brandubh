@@ -31,7 +31,7 @@ class Standard:
         self.recorder = ai_utils.GameRecorder()
 
     def play(self):
-        while self.game.terminal == -1:
+        while self.game.winner == -1:
             action_space = self.game.action_space
 
             self.recorder.player.append(self.game.player)
@@ -52,7 +52,7 @@ class Standard:
             else:
                 raise Exception("Unknown player")
             self.game = self.game.step(action_selected)
-            terminal = self.game.terminal
+            terminal = self.game.winner
             if terminal != -1:
                 self.recorder.terminal.append(1)
                 self.recorder.winner = terminal
@@ -67,11 +67,12 @@ class Standard:
 
 class MCTSGame:
     """An episode designed to test and debug MCTS."""
-    def __init__(self, num_iter=2000):
+    def __init__(self, base_iter):
         self.game = GameNode()
-        self.num_iter = num_iter
+        self.base_iter = base_iter
 
     def play(self):
         while not self.game.is_terminal:
-            self.game = mcts.run_mcts(self.game, num_iter=self.num_iter)
-        self.game.walk_back()
+            self.game = mcts.run_mcts(self.game, base_iter=self.base_iter)
+
+        return self.game
