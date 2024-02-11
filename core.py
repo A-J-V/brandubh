@@ -1,7 +1,6 @@
 import numpy as np
 from mcts import ucb1
 
-
 brandubh = """\
 X..A..X
 ...A...
@@ -10,7 +9,6 @@ AADKDAA
 ...D...
 ...A...
 X..A..X"""
-
 
 char_to_num = {'X': 4,
                '.': 0,
@@ -26,13 +24,13 @@ class GameNode:
     KING = 3
     CORNER = 4
 
-    def __init__(self, player=1, board=brandubh, parent=None, action_index=None):
+    def __init__(self, player=1, board=brandubh, parent=None, action_index=None, piece_counts=None):
         if isinstance(board, str):
             self.board = np.array([[char_to_num[char] for char in list(c)]
-                                   for c in board.splitlines()]
-                                  )
+                                   for c in board.splitlines()],
+                                  dtype=np.int8)
         elif isinstance(board, np.ndarray):
-            self.board = np.array(board)
+            self.board = np.array(board, dtype=np.int8)
         else:
             raise Exception("Unrecognized board type")
 
@@ -51,6 +49,11 @@ class GameNode:
             self.winner = None
             self.action_space = None
             self.unexpanded_children = None
+
+        if piece_counts is None:
+            self.piece_counts = {1: 8, 2: 4, 3: 1}
+        else:
+            self.piece_counts = dict(piece_counts)
 
         # These are used for MCTS
         self.policy = None
@@ -181,7 +184,8 @@ class GameNode:
                     0 <= flanker_row < 7 and 0 <= flanker_col < 7 and
                     self.board[adjacent_row, adjacent_col] in enemies and
                     self.board[flanker_row, flanker_col] in friends):
-                # There is an adjacent enemy who is flanked. Eliminate it.
+                # There is an adjacent enemy who is flanked. Eliminate it and adjust self.piece_counts.
+                self.piece_counts[self.board[adjacent_row, adjacent_col]] -= 1
                 self.board[adjacent_row, adjacent_col] = self.BLANK
 
     def check_winner(self):
@@ -189,11 +193,12 @@ class GameNode:
                 self.board[0, 6] == 3 or
                 self.board[6, 0] == 3 or
                 self.board[6, 6] == 3 or
-                not np.isin(self.board, [self.ATTACKER]).any()):
-            #print("Defenders Win!")
+                self.piece_counts[self.ATTACKER] == 0
+        ):
+            # print("Defenders Win!")
             return 0
-        elif not np.isin(self.board, [self.KING]).any():
-            #print("Attackers Win!")
+        elif self.piece_counts[self.KING] == 0:
+            # print("Attackers Win!")
             return 1
         elif len(self.unexpanded_children) == 0:
             return 1 if self.player == 0 else 1
@@ -211,7 +216,8 @@ class GameNode:
         next_node = GameNode(player=0 if self.player == 1 else 1,
                              board=self.board,
                              parent=self,
-                             action_index=action)
+                             action_index=action,
+                             piece_counts=self.piece_counts)
         next_index = next_node.take_action(action, self.player)
         next_node.capture(next_index, self.player)
         next_node.action_space = next_node.get_action_space(next_node.player).flatten()
