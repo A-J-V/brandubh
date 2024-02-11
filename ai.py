@@ -11,27 +11,14 @@ class RandomAI:
         # Dummy function
         pass
 
-    def select_action(self, _, action_space, recorder=None, device=None):
+    def select_action(self, _, action_space, device=None):
         action_space = action_space
         action_probs = np.where(action_space == 1, 1 / np.sum(action_space), 0)
         action_selection = np.argmax(np.random.multinomial(1, action_probs))
 
-        if recorder is not None:
-            recorder.actions.append(action_selection)
-            recorder.action_probs.append(action_probs[action_selection])
-            if self.player == 1:
-                recorder.v_est_1.append(0.0)
-            elif self.player == 0:
-                recorder.v_est_0.append(0.0)
-
         return action_selection, _
 
-    def predict_value(self, _, recorder=None, device=None):
-        if recorder is not None:
-            if self.player == 1:
-                recorder.v_est_1.append(0.0)
-            elif self.player == 0:
-                recorder.v_est_0.append(0.0)
+    def predict_value(self, _, device=None):
         return 0.0
 
 
