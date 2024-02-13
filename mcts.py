@@ -53,6 +53,35 @@ def expand_child(node):
     return expanded_child
 
 
+def check_quiescence_defender(node):
+    king_loc = np.where(node.board == 3)
+    king_r, king_c = king_loc[0].item(), king_loc[1].item()
+    if king_c == 0 or king_c == 6:
+        up_to_go = king_r - 1
+        down_to_go = 11 - king_r
+        if node.action_space[up_to_go*7*7 + king_r * 7 + king_c] == 1:
+            print("Quiescence (UP) detected")
+            print(node.board)
+            return True
+        elif node.action_space[down_to_go*7*7 + king_r * 7 + king_c] == 1:
+            print("Quiescence (DOWN) detected")
+            print(node.board)
+            return True
+
+    elif king_r == 0 or king_r == 6:
+        left_to_go = 11 + king_c
+        right_to_go = 23 - king_c
+        if node.action_space[left_to_go * 7 * 7 + king_r * 7 + king_c] == 1:
+            print("Quiescence (LEFT) detected")
+            print(node.board)
+            return True
+        elif node.action_space[right_to_go * 7 * 7 + king_r * 7 + king_c] == 1:
+            print("Quiescence (RIGHT) detected")
+            print(node.board)
+            return True
+    else:
+        return False
+
 def rollout(node, caller):
     """
     Perform a random rollout from node to termination.
@@ -62,6 +91,9 @@ def rollout(node, caller):
     # We clone it to make a dummy game branch and run the rollout from the clone.
     rollout_node = node.clone()
     while not rollout_node.is_terminal:
+        # if rollout_node.player == 0 and check_quiescence_defender(rollout_node):
+        #     rollout_node.winner = 0
+        #     continue
         try:
             action = random.choice(rollout_node.unexpanded_children)
         except Exception as e:
