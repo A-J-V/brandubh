@@ -232,7 +232,8 @@ class GameNode:
                          board=self.board,
                          parent=None,
                          action_index=self.action_index)
-        clone.winner = clone.check_winner()
+        clone.piece_counts = dict(self.piece_counts)
+        clone.winner = self.winner
         return clone
 
     def backpropagate(self, value):
