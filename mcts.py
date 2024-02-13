@@ -82,6 +82,47 @@ def check_quiescence_defender(node):
     else:
         return False
 
+
+def check_quiescence_attacker(node):
+    king_loc = np.where(node.board == 3)
+    king_r, king_c = king_loc[0].item(), king_loc[1].item()
+
+    def scan_for_attackers(start_row, start_col):
+        for (dr, dc) in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            tr, tc = start_row, start_col
+            # If we can walk from the blank tile in any direction and bump an attacker, that attacker could
+            # capture the King. Therefore, the Attackers have imminent victory, return True.
+            while True:
+                tr += dr
+                tc += dc
+                if (0 <= tr <= 6) and (0 <= tc <= 6) and node.board[tr, tc] == 0:
+                    continue
+                elif (0 <= tr <= 6) and (0 <= tc <= 6) and node.board[tr, tc] == 1:
+                    return True
+                else:
+                    break
+        return False
+
+    # The attackers can win immediately if the king has an attacker (or corner) next to him,
+    # and the attackers can move an attacker to flank the king.
+    if 0 < king_r < 6:
+        if node.board[king_r - 1, king_c] == node.ATTACKER or node.board[king_r - 1, king_c] == node.CORNER:
+            if node.board[king_r + 1, king_c] == node.BLANK and scan_for_attackers(king_r + 1, king_c):
+                return True
+        elif node.board[king_r + 1, king_c] == node.ATTACKER or node.board[king_r + 1, king_c] == node.CORNER:
+            if node.board[king_r - 1, king_c] == node.BLANK and scan_for_attackers(king_r - 1, king_c):
+                return True
+    elif 0 < king_c < 6:
+        if node.board[king_r, king_c - 1] == node.ATTACKER or node.board[king_r, king_c - 1] == node.CORNER:
+            if node.board[king_r, king_c + 1] == node.BLANK and scan_for_attackers(king_r, king_c + 1):
+                return True
+        elif node.board[king_r, king_c + 1] == node.ATTACKER or node.board[king_r, king_c + 1] == node.CORNER:
+            if node.board[king_r, king_c - 1] == node.BLANK and scan_for_attackers(king_r, king_c - 1):
+                return True
+    else:
+        return False
+
+
 def rollout(node, caller):
     """
     Perform a random rollout from node to termination.
@@ -91,9 +132,12 @@ def rollout(node, caller):
     # We clone it to make a dummy game branch and run the rollout from the clone.
     rollout_node = node.clone()
     while not rollout_node.is_terminal:
-        # if rollout_node.player == 0 and check_quiescence_defender(rollout_node):
-        #     rollout_node.winner = 0
-        #     continue
+        if rollout_node.player == 0 and check_quiescence_defender(rollout_node):
+            rollout_node.winner = 0
+            continue
+        elif rollout_node.player == 1 and check_quiescence_attacker(rollout_node):
+            rollout_node.winner = 1
+            continue
         try:
             action = random.choice(rollout_node.unexpanded_children)
         except Exception as e:
