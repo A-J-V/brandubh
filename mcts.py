@@ -55,29 +55,27 @@ def expand_child(node):
 
 def check_quiescence_defender(node):
     king_loc = np.where(node.board == 3)
-    king_r, king_c = king_loc[0].item(), king_loc[1].item()
+    try:
+        king_r, king_c = king_loc[0].item(), king_loc[1].item()
+    except Exception as e:
+        print(king_loc)
+        print(node.board)
+        print(node.piece_counts)
+        raise e
     if king_c == 0 or king_c == 6:
         up_to_go = king_r - 1
         down_to_go = 11 - king_r
-        if node.action_space[up_to_go*7*7 + king_r * 7 + king_c] == 1:
-            print("Quiescence (UP) detected")
-            print(node.board)
+        if node.action_space[up_to_go * 7 * 7 + king_r * 7 + king_c] == 1:
             return True
-        elif node.action_space[down_to_go*7*7 + king_r * 7 + king_c] == 1:
-            print("Quiescence (DOWN) detected")
-            print(node.board)
+        elif node.action_space[down_to_go * 7 * 7 + king_r * 7 + king_c] == 1:
             return True
 
     elif king_r == 0 or king_r == 6:
         left_to_go = 11 + king_c
         right_to_go = 23 - king_c
         if node.action_space[left_to_go * 7 * 7 + king_r * 7 + king_c] == 1:
-            print("Quiescence (LEFT) detected")
-            print(node.board)
             return True
         elif node.action_space[right_to_go * 7 * 7 + king_r * 7 + king_c] == 1:
-            print("Quiescence (RIGHT) detected")
-            print(node.board)
             return True
     else:
         return False
@@ -123,7 +121,7 @@ def check_quiescence_attacker(node):
         return False
 
 
-def rollout(node, caller):
+def rollout(node, caller, use_quiescence):
     """
     Perform a random rollout from node to termination.
     The intermediate game states between node and termination won't persist beyond the rollout.
@@ -131,13 +129,16 @@ def rollout(node, caller):
     # We don't want to change the actual node that's being used in the game.
     # We clone it to make a dummy game branch and run the rollout from the clone.
     rollout_node = node.clone()
+
+    # If the node that was selected is already terminal, this loop will be skipped.
     while not rollout_node.is_terminal:
-        if rollout_node.player == 0 and check_quiescence_defender(rollout_node):
-            rollout_node.winner = 0
-            continue
-        elif rollout_node.player == 1 and check_quiescence_attacker(rollout_node):
-            rollout_node.winner = 1
-            continue
+        if use_quiescence:
+            if rollout_node.player == 0 and check_quiescence_defender(rollout_node):
+                rollout_node.winner = 0
+                continue
+            elif rollout_node.player == 1 and check_quiescence_attacker(rollout_node):
+                rollout_node.winner = 1
+                continue
         try:
             action = random.choice(rollout_node.unexpanded_children)
         except Exception as e:
@@ -160,7 +161,6 @@ def best_child(node):
     max_visit_index = argmax(visit_counts)
     best = node.children[max_visit_index]
     best.reset_mcts()
-    print(visit_counts)
     return best
 
 
@@ -185,7 +185,15 @@ def run_mcts(root_node, base_iter):
                 policy_counts[node.action_index] += 1
 
         # 3) Simulation and Backpropagation
-        rollout(node, caller=root_node.player)
+        if node.is_terminal:
+            use_quiescence = False
+        elif node.player == 0 and check_quiescence_defender(node):
+            use_quiescence = False
+        elif node.player == 1 and check_quiescence_defender(node):
+            use_quiescence = False
+        else:
+            use_quiescence = True
+        rollout(node, caller=root_node.player, use_quiescence=use_quiescence)
     policy = policy_counts / num_iter
     root_node.policy = policy
     return best_child(root_node)
