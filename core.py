@@ -43,17 +43,20 @@ class GameNode:
         # If a child, the parent will quickly reassign these; otherwise, they're assigned here.
         if parent is None:
             self.winner = -1
-            self.action_space = self.get_action_space(player).flatten()
+            self.all_actions = self.get_action_space()
             self.unexpanded_children = [action.item() for action in np.argwhere(self.action_space == 1)]
         else:
             self.winner = None
-            self.action_space = None
+            self.all_actions = None
             self.unexpanded_children = None
 
+        # These are used for memoization
         if piece_counts is None:
             self.piece_counts = {1: 8, 2: 4, 3: 1}
         else:
             self.piece_counts = dict(piece_counts)
+        self.need_update = []
+        self.need_scan = []
 
         # These are used for MCTS
         self.policy = None
@@ -69,6 +72,15 @@ class GameNode:
     @property
     def is_fully_expanded(self):
         return True if len(self.unexpanded_children) == 0 else False
+
+    @property
+    def action_space(self):
+        if self.player == 0:
+            return np.where((self.board == self.KING) | (self.board == self.DEFENDER),
+                            self.all_actions,
+                            0).flatten()
+        else:
+            return np.where(self.board == self.ATTACKER, self.all_actions, 0).flatten()
 
     def get_winner(self):
         if self.winner is None:
@@ -89,7 +101,8 @@ class GameNode:
         return action_space
 
     def get_actions(self,
-                    index):
+                    index,
+                    fetch_mode='get_actions'):
         if self.board[index[0], index[1]] in [self.BLANK, self.CORNER]:
             return np.zeros(24)
         else:
@@ -127,6 +140,8 @@ class GameNode:
                     legal_moves[i] = 1
                 else:
                     # There is another piece blocking the path
+                    if fetch_mode == 'fetch_updates':
+                        self.need_update.append(tuple(tmp_index))
                     break
                 i += 1
         # Cache would go here if updating a cache of legal moves.
@@ -146,12 +161,12 @@ class GameNode:
 
         # Should be upgraded to a cache in the future
         if (self.board[row, col] not in legal_pieces or
-                self.get_actions((row, col))[move] == 0):
+                self.all_actions[move, row, col] == 0):
             print(self.board)
             print(self.board[row, col])
             print(row, col)
             print(move)
-            print(self.get_actions((row, col)))
+            print(self.all_actions[:, row, col])
             raise Exception("Invalid action")
 
         # Get the move axis, direction, and number of tiles.
@@ -164,10 +179,21 @@ class GameNode:
         new_index[axis] += direction * num
         new_index = tuple(new_index)
 
+        self.need_scan.append((row, col))
+        self.need_scan.append(new_index)
+
         # Make the move
         self.board[new_index[0], new_index[1]] = self.board[row, col]
         self.board[row, col] = 0
         return new_index
+
+    def refresh_cache(self):
+        for index in self.need_scan:
+            self.get_actions(index, fetch_mode='fetch_updates')
+        for index in set(self.need_scan + self.need_update):
+            self.all_actions[:, index[0], index[1]] = self.get_actions(index)
+        self.need_scan = []
+        self.need_update = []
 
     def capture(self,
                 index,
@@ -185,6 +211,7 @@ class GameNode:
                     self.board[adjacent_row, adjacent_col] in enemies and
                     self.board[flanker_row, flanker_col] in friends):
                 # There is an adjacent enemy who is flanked. Eliminate it and adjust self.piece_counts.
+                self.need_scan.append((adjacent_row, adjacent_col))
                 self.piece_counts[self.board[adjacent_row, adjacent_col]] -= 1
                 self.board[adjacent_row, adjacent_col] = self.BLANK
 
@@ -218,22 +245,26 @@ class GameNode:
                              parent=self,
                              action_index=action,
                              piece_counts=self.piece_counts)
+        next_node.all_actions = np.array(self.all_actions)
         next_index = next_node.take_action(action, self.player)
         next_node.capture(next_index, self.player)
-        next_node.action_space = next_node.get_action_space(next_node.player).flatten()
+        next_node.refresh_cache()
         next_node.unexpanded_children = [action.item() for action in np.argwhere(next_node.action_space == 1)]
         next_node.winner = next_node.check_winner()
         self.children.append(next_node)
+
         return next_node
 
     # The below methods are used exclusively for MCTS
     def clone(self):
         clone = GameNode(player=self.player,
                          board=self.board,
-                         parent=None,
+                         parent=-1,
                          action_index=self.action_index)
         clone.piece_counts = dict(self.piece_counts)
+        clone.all_actions = np.array(self.all_actions)
         clone.winner = self.winner
+        clone.unexpanded_children = [action.item() for action in np.argwhere(clone.action_space == 1)]
         return clone
 
     def backpropagate(self, value):
@@ -252,3 +283,5 @@ class GameNode:
         self.value = 0
         self.children = []
         self.unexpanded_children = [action.item() for action in np.argwhere(self.action_space == 1)]
+        self.need_scan = []
+        self.need_update = []
