@@ -28,41 +28,26 @@ class Standard:
             self.defender = ai.RandomAI(player=0)
         else:
             self.defender = defender.to(self.device)
-        self.recorder = ai_utils.GameRecorder()
 
     def play(self):
         while self.game.winner == -1:
             action_space = self.game.action_space
 
-            self.recorder.player.append(self.game.player)
-            self.recorder.state.append(self.game.board.flatten())
-            self.recorder.action_space.append(action_space.flatten())
             if self.game.player == 1:
                 action_selected, prob = self.attacker.select_action(self.game.board,
                                                                     action_space,
-                                                                    self.recorder,
                                                                     device=self.device)
-                _ = self.defender.predict_value(self.game.board, self.recorder, device=self.device)
+                _ = self.defender.predict_value(self.game.board, device=self.device)
             elif self.game.player == 0:
                 action_selected, prob = self.defender.select_action(self.game.board,
                                                                     action_space,
-                                                                    self.recorder,
                                                                     device=self.device)
-                _ = self.attacker.predict_value(self.game.board, self.recorder, device=self.device)
+                _ = self.attacker.predict_value(self.game.board, device=self.device)
             else:
                 raise Exception("Unknown player")
             self.game = self.game.step(action_selected)
-            terminal = self.game.winner
-            if terminal != -1:
-                self.recorder.terminal.append(1)
-                self.recorder.winner = terminal
-            else:
-                self.recorder.terminal.append(0)
-            self.recorder.tick()
-        if self.recorder is not None:
-            self.recorder.record().to_csv(f"./game_records/game_{self.uid}.csv", index=False)
-        #self.game.walk_back()
-        return terminal
+
+        return self.game
 
 
 class MCTSGame:
