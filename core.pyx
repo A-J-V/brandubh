@@ -1,5 +1,6 @@
 import numpy as np
-from mcts import ucb1
+cimport numpy as cnp
+cimport cython
 
 brandubh = """\
 X..A..X
@@ -100,6 +101,8 @@ class GameNode:
                     action_space[:, i, j] = self.get_actions((i, j))
         return action_space
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
     def get_actions(self,
                     index,
                     fetch_mode='get_actions'):
@@ -108,18 +111,34 @@ class GameNode:
         else:
             legal_moves = np.zeros(24)
 
+        # Check restricted tiles
+        cdef int restrictions[4]
+        if self.board[index[0], index[1]] != self.KING:
+            #restrictions = [self.ATTACKER, self.DEFENDER, self.KING, self.CORNER]
+            restrictions[0], restrictions[1], restrictions[2], restrictions[3] = self.ATTACKER, self.DEFENDER, self.KING, self.CORNER
+        else:
+            #restrictions = [self.ATTACKER, self.DEFENDER, self.KING]
+            restrictions[0], restrictions[1], restrictions[2], restrictions[3] = self.ATTACKER, self.DEFENDER, self.KING, -10
+
         # Check the legality of the 24 possible moves this cell could make
         # 0-5 is up, 6-11 is down, 12-17 is left, 18-23 is right.
-        dx = [0, 0, 1, 1]
-        dy = [-1, 1, -1, 1]
-        init_row, init_col = index
-        tmp_index = [init_row, init_col]
-
-        # Check restricted tiles
-        if self.board[index[0], index[1]] != self.KING:
-            restrictions = [self.ATTACKER, self.DEFENDER, self.KING, self.CORNER]
-        else:
-            restrictions = [self.ATTACKER, self.DEFENDER, self.KING]
+        cdef int dx[4]
+        cdef int dy[4]
+        dx[0], dx[1], dx[2], dx[3] = 0, 0, 1, 1
+        dy[0], dy[1], dy[2], dy[3] = -1, 1, -1, 1
+        #dx = [0, 0, 1, 1]
+        #dy = [-1, 1, -1, 1]
+        cdef int init_row
+        cdef int init_col
+        cdef int tmp_index[2]
+        init_row, init_col = index[0], index[1]
+        tmp_index[0], tmp_index[1] = init_row, init_col
+        #tmp_index = [init_row, init_col]
+        cdef int k
+        cdef int i
+        cdef int axis
+        cdef int direction
+        cdef int cell
 
         for k in range(4):
             axis = dx[k]
@@ -135,7 +154,8 @@ class GameNode:
                         (tmp_index[1] > 6)):
                     break
 
-                if self.board[tmp_index[0], tmp_index[1]] not in restrictions:
+                cell = self.board[tmp_index[0], tmp_index[1]]
+                if (cell != restrictions[0]) & (cell != restrictions[1]) & (cell != restrictions[2]) & (cell != restrictions[3]):
                     # There is no other piece blocking the path
                     legal_moves[i] = 1
                 else:
