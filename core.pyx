@@ -29,9 +29,9 @@ class GameNode:
         if isinstance(board, str):
             self.board = np.array([[char_to_num[char] for char in list(c)]
                                    for c in board.splitlines()],
-                                  dtype=np.int8)
+                                  dtype=np.intc)
         elif isinstance(board, np.ndarray):
-            self.board = np.array(board, dtype=np.int8)
+            self.board = np.array(board, dtype=np.intc)
         else:
             raise Exception("Unrecognized board type")
 
@@ -66,6 +66,9 @@ class GameNode:
         self.children = []
         self.parent = parent
 
+        # This is used for recording
+        self.legal_actions = None
+
     @property
     def is_terminal(self):
         return False if self.winner == -1 else True
@@ -90,7 +93,7 @@ class GameNode:
             return self.winner
 
     def get_action_space(self, player=None):
-        action_space = np.zeros((24, 7, 7))
+        action_space = np.zeros((24, 7, 7), dtype=np.intc)
         for i in range(7):
             for j in range(7):
                 if player == 1 and self.board[i, j] != self.ATTACKER:
@@ -107,9 +110,9 @@ class GameNode:
                     index,
                     fetch_mode='get_actions'):
         if self.board[index[0], index[1]] in [self.BLANK, self.CORNER]:
-            return np.zeros(24)
+            return np.zeros(24, dtype=np.intc)
         else:
-            legal_moves = np.zeros(24)
+            legal_moves = np.zeros(24, dtype=np.intc)
 
         # Check restricted tiles
         cdef int restrictions[4]
