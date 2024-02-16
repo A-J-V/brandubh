@@ -1,9 +1,5 @@
-import copy
 import numpy as np
 import random
-from tqdm import tqdm
-
-import core
 
 
 def argmax(lst: list):
@@ -194,6 +190,6 @@ def run_mcts(root_node, base_iter):
         else:
             use_quiescence = True
         rollout(node, caller=root_node.player, use_quiescence=use_quiescence)
-    policy = policy_counts / num_iter
-    root_node.policy = policy
+    root_node.policy = policy_counts
+    root_node.legal_actions = root_node.action_space
     return best_child(root_node)
