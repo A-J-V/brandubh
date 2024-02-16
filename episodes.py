@@ -1,13 +1,6 @@
 import ai
-import ai_utils
 from core import *
-import curriculum_learning
 import mcts
-
-import os
-import torch
-from torch.utils.data import DataLoader
-from tqdm import tqdm
 
 
 class Standard:
