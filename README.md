@@ -1,9 +1,9 @@
 # Brandubh
 
 ## Description
-A Python implementation of "Brandubh", a small variant of Norse Tafl games that became the preferred version in Ireland. The rules used here are simplified and included below.
+A Python implementation of the Norse Tafl game"Brandubh" using Deep RL agents. The rules used here are simplified and included below.
 
-This project is the spiritual successor of a previous attempt to code a full version of Copenhagen Hnefatafl and train a superhuman RL agent to play the game. That attempt was archived due to issues with training the agent.
+This project is the spiritual successor of a ![more experimental attempt](https://github.com/A-J-V/hnefatafl_archive) to implement a larger Tafl game using Deep RL.
 
 ![Game Logic](https://img.shields.io/badge/Game_Logic-Complete-green)
 ![MCTS](https://img.shields.io/badge/MCTS-Complete-green)
