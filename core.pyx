@@ -142,7 +142,7 @@ class GameNode:
     @cython.wraparound(False)
     def get_actions(self,
                     index: Tuple[int, int],
-                    fetch_mode='get_actions') -> np.ndarray:
+                    update_mode=False) -> np.ndarray:
         """Get the legal actions at index.
 
         This is the most time-consuming operation in the game. Give an index, it computes legal actions in
@@ -150,12 +150,12 @@ class GameNode:
 
         :param index: The index of the cell whose legal actions we want.
         :type index: tuple
-        :param fetch_mode: 'get_actions' to find actions at index. 'fetch_updates' to find what indices need an update.
-        :type fetch_mode: str
+        :param update_mode: False to find actions at index. True to find what indices need an update.
+        :type update_mode: bool
         :return: A (24,) NumPy array of legal actions.
         :rtype: numpy.ndarray
         """
-        if self.board[index[0], index[1]] in [self.BLANK, self.CORNER]:
+        if self.board[index[0], index[1]] in [self.BLANK, self.CORNER] and not update_mode:
             return np.zeros(24, dtype=np.intc)
         else:
             legal_moves = np.zeros(24, dtype=np.intc)
@@ -209,7 +209,7 @@ class GameNode:
                     legal_moves[i] = 1
                 else:
                     # Otherwise, another piece is blocking the path
-                    if fetch_mode == 'fetch_updates':
+                    if update_mode:
                         self.need_update.append(tuple(tmp_index))
                     break
                 i += 1
@@ -271,8 +271,8 @@ class GameNode:
         """Refresh the action space cache."""
         # Any index involved in a move gets checked to see if there are more indices that have been invalidated.
         for index in self.need_scan:
-            self.get_actions(index, fetch_mode='fetch_updates')
-        # After the scan, update everything that was found to need an update
+            self.get_actions(index, update_mode=True)
+        # After the scan, update everything that was found to need an update.
         for index in set(self.need_scan + self.need_update):
             self.all_actions[:, index[0], index[1]] = self.get_actions(index)
         # Empty both self.need_scan and self.need_update since the cache is now fresh.
