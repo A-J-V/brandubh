@@ -3,7 +3,7 @@ from core import *
 import mcts
 
 
-class Standard:
+class RandomSelfPlay:
     def __init__(self,
                  attacker=None,
                  defender=None,
@@ -43,14 +43,44 @@ class Standard:
         return self.game
 
 
-class MCTSGame:
+class MctsSelfPlay:
     """An episode designed to test and debug MCTS."""
     def __init__(self, base_iter):
         self.game = GameNode()
         self.base_iter = base_iter
 
     def play(self):
+        """Play the game until termination."""
         while not self.game.is_terminal:
             self.game = mcts.run_mcts(self.game, base_iter=self.base_iter)
 
         return self.game
+
+
+class HumanVMcts:
+    """A game in which a human player will play against an MCTS-based AI."""
+    def __init__(self, base_iter=10, human=1):
+        self.game = GameNode()
+        self.base_iter = base_iter
+        self.human = human
+        print(f"Human is playing as {'attacker' if human == 1 else 'defender'}.")
+
+    def play(self):
+        """Play the game until termination."""
+        print(self.game.board)
+        while not self.game.is_terminal:
+            print(f"Player: {self.game.player}")
+            if self.game.player == self.human:
+                human_move = input("Your move, human! Type input as 'move, row, col'.")
+                action = np.ravel_multi_index([int(x) for x in human_move.split(',')],
+                                              dims=(24, 7, 7),
+                                              ).item()
+                print(human_move)
+                print(action)
+                self.game = self.game.step(action)
+            else:
+                self.game = mcts.run_mcts(self.game, base_iter=self.base_iter)
+
+            print(self.game.board)
+        print(self.game.winner)
+

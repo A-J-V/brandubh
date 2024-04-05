@@ -68,7 +68,7 @@ class GameNode:
             self.all_actions = None
             self.unexpanded_children = None
 
-        # These are used for memoization
+        # These are used for memoization (caching)
         if piece_counts is None:
             self.piece_counts = {1: 8, 2: 4, 3: 1}
         else:
