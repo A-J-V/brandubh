@@ -66,7 +66,7 @@ class HumanVMcts:
         print(f"Human is playing as {'attacker' if human == 1 else 'defender'}.")
 
     def play(self):
-        """Play the game until termination."""
+        """Play the game until termination, alternating between MCTS and human input."""
         print(self.game.board)
         while not self.game.is_terminal:
             print(f"Player: {self.game.player}")
@@ -75,12 +75,10 @@ class HumanVMcts:
                 action = np.ravel_multi_index([int(x) for x in human_move.split(',')],
                                               dims=(24, 7, 7),
                                               ).item()
-                print(human_move)
-                print(action)
                 self.game = self.game.step(action)
             else:
                 self.game = mcts.run_mcts(self.game, base_iter=self.base_iter)
 
             print(self.game.board)
-        print(self.game.winner)
+        print(f"{self.game.winner} wins!")
 
