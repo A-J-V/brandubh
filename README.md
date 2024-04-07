@@ -8,7 +8,7 @@ This project is the spiritual successor of a [more experimental attempt](https:/
 ![Game Logic](https://img.shields.io/badge/Game_Logic-Complete-green)
 ![MCTS](https://img.shields.io/badge/MCTS-Complete-green)
 ![Deep RL Agent](https://img.shields.io/badge/Deep_RL_Agent-In_Progress-yellow)
-![Human Playable](https://img.shields.io/badge/Human_Playable-Not_Started-red)
+![Human Playable](https://img.shields.io/badge/Human_Playable-In_Progress-yellow)
 
 ## Installation
 TBD. This project is in the phase of developing the RL agent and is not yet playable by humans. 
