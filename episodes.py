@@ -1,6 +1,7 @@
 import ai
 from core import *
 import mcts
+import graphics
 
 
 class RandomSelfPlay:
@@ -67,7 +68,9 @@ class HumanVMcts:
 
     def play(self):
         """Play the game until termination, alternating between MCTS and human input."""
-        print(self.game.board)
+        display = graphics.initialize()
+        graphics.refresh(self.game.board, display)
+
         while not self.game.is_terminal:
             print(f"Player: {self.game.player}")
             if self.game.player == self.human:
@@ -79,6 +82,6 @@ class HumanVMcts:
             else:
                 self.game = mcts.run_mcts(self.game, base_iter=self.base_iter)
 
-            print(self.game.board)
+            graphics.refresh(self.game.board, display)
         print(f"{self.game.winner} wins!")
 
