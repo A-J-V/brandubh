@@ -185,7 +185,7 @@ def run_mcts(root_node, base_iter):
             use_quiescence = False
         elif node.player == 0 and check_quiescence_defender(node):
             use_quiescence = False
-        elif node.player == 1 and check_quiescence_defender(node):
+        elif node.player == 1 and check_quiescence_attacker(node):
             use_quiescence = False
         else:
             use_quiescence = True
