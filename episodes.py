@@ -2,6 +2,8 @@ import ai
 from core import *
 import mcts
 import graphics
+import pygame
+from input import identify_clicked_cell
 
 
 class RandomSelfPlay:
@@ -45,7 +47,7 @@ class RandomSelfPlay:
 
 
 class MctsSelfPlay:
-    """An episode designed to test and debug MCTS."""
+    """An episode designed to test and debug MCTS or generating data for network training."""
     def __init__(self, base_iter):
         self.game = GameNode()
         self.base_iter = base_iter
@@ -71,17 +73,25 @@ class HumanVMcts:
         display = graphics.initialize()
         graphics.refresh(self.game.board, display)
 
-        while not self.game.is_terminal:
-            print(f"Player: {self.game.player}")
-            if self.game.player == self.human:
-                human_move = input("Your move, human! Type input as 'move, row, col'.")
-                action = np.ravel_multi_index([int(x) for x in human_move.split(',')],
-                                              dims=(24, 7, 7),
-                                              ).item()
-                self.game = self.game.step(action)
-            else:
-                self.game = mcts.run_mcts(self.game, base_iter=self.base_iter)
+        # while not self.game.is_terminal:
+        #     print(f"Player: {self.game.player}")
+        #     if self.game.player == self.human:
+        #         human_move = input("Your move, human! Type input as 'move, row, col'.")
+        #         action = np.ravel_multi_index([int(x) for x in human_move.split(',')],
+        #                                       dims=(24, 7, 7),
+        #                                       ).item()
+        #         self.game = self.game.step(action)
+        #     else:
+        #         self.game = mcts.run_mcts(self.game, base_iter=self.base_iter)
+        #
+        #     graphics.refresh(self.game.board, display)
+        # print(f"{self.game.winner} wins!")
 
-            graphics.refresh(self.game.board, display)
-        print(f"{self.game.winner} wins!")
+        while not self.game.is_terminal:
+            for event in pygame.event.get():
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    x, y = event.pos
+                    tile_col, tile_row = identify_clicked_cell(x, y)
+                    print(f"Player clicked tile ({tile_row}, {tile_col}).")
+                    print(f"That piece is a {self.game.board[tile_row, tile_col]}")
 

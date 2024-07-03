@@ -4,7 +4,9 @@ import pygame
 # ROW and COL are reversed sometimes, this should be fixed
 WIN_SIZE = 1700
 BORDER_SCALE = 0.16
-TILE_SIZE = WIN_SIZE * 0.15714
+BORDER_ADJ = WIN_SIZE * BORDER_SCALE
+TILE_SCALE = 0.15714
+TILE_SIZE = WIN_SIZE * TILE_SCALE
 KING_SCALE = TILE_SIZE * 1.2727
 COL_SPACING = WIN_SIZE * 0.09714
 ROW_SPACING = WIN_SIZE * 0.09285
@@ -64,7 +66,8 @@ def refresh(board: np.array,
     """
     display_rect = display.get_rect()
     display.blit(board_image, display_rect)
-    piece_rect = pygame.Rect((WIN_SIZE * BORDER_SCALE, WIN_SIZE * BORDER_SCALE, TILE_SIZE, TILE_SIZE))
+    piece_rect = pygame.Rect((BORDER_ADJ + 1 * COL_SPACING,
+                              BORDER_ADJ + 1 * ROW_SPACING, TILE_SIZE, TILE_SIZE))
     display.blit(RED_TILE, piece_rect)
     for i, row in enumerate(range(board.shape[0])):
         for j, col in enumerate(range(board.shape[1])):
@@ -78,6 +81,10 @@ def refresh(board: np.array,
                 rc -= KING_ROW_ADJ
 
             piece_sprite = encoding_to_img[board[i, j].item()]
-            piece_rect = pygame.Rect((col * COL_SPACING + cc, row * ROW_SPACING + rc, TILE_SIZE, TILE_SIZE))
+            piece_rect = pygame.Rect((col * COL_SPACING + cc,
+                                      row * ROW_SPACING + rc,
+                                      TILE_SIZE,
+                                      TILE_SIZE),
+                                     )
             display.blit(piece_sprite, piece_rect)
     pygame.display.update()
