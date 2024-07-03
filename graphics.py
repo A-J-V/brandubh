@@ -1,5 +1,6 @@
 import numpy as np
 import pygame
+from typing import Tuple, Optional
 
 # ROW and COL are reversed sometimes, this should be fixed
 WIN_SIZE = 1700
@@ -14,8 +15,8 @@ KING_COL_ADJ = WIN_SIZE * 0.02343
 KING_ROW_ADJ = WIN_SIZE * 0.04270
 TILE_COL_OFFSET = WIN_SIZE * 0.12857
 TILE_ROW_OFFSET = WIN_SIZE * 0.09285
-RED_HIGHLIGHT = (240, 50, 50, 80)
-BLUE_HIGHLIGHT = (50, 50, 240, 80)
+RED_HIGHLIGHT = (240, 50, 50, 165)
+BLUE_HIGHLIGHT = (50, 50, 240, 165)
 RED_TILE = None
 BLUE_TILE = None
 
@@ -54,6 +55,7 @@ def initialize():
 
 def refresh(board: np.array,
             display: pygame.surface,
+            selected_cell: Optional[Tuple] = None,
             ):
     """
     Update the camera.
@@ -63,12 +65,15 @@ def refresh(board: np.array,
 
     :param board: The 3D NumPy "board" array on which the game is being played.
     :param display: The Pygame surface on which all graphics are drawn.
+    :param selected_cell: The selected cell of the board. Used to highlight the selected cell.
     """
     display_rect = display.get_rect()
     display.blit(board_image, display_rect)
-    piece_rect = pygame.Rect((BORDER_ADJ + 1 * COL_SPACING,
-                              BORDER_ADJ + 1 * ROW_SPACING, TILE_SIZE, TILE_SIZE))
-    display.blit(RED_TILE, piece_rect)
+
+    if selected_cell is not None:
+        piece_rect = pygame.Rect((BORDER_ADJ + selected_cell[0] * COL_SPACING,
+                                  BORDER_ADJ + selected_cell[1] * ROW_SPACING, TILE_SIZE, TILE_SIZE))
+        display.blit(BLUE_TILE, piece_rect)
     for i, row in enumerate(range(board.shape[0])):
         for j, col in enumerate(range(board.shape[1])):
             piece = board[i, j].item()
