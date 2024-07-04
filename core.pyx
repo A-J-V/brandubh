@@ -392,16 +392,13 @@ class GameNode:
     def backpropagate(self, value: float) -> None:
         """Recursively update values up through the game tree.
 
-        MCTS exploration does not persist beyond a single turn, so we don't need to worry about the value from
-        the other player's perspective.
-
         :param value: The value to propagate.
         :type value: float
         """
         self.visits += 1
         self.value += value
         if self.parent is not None:
-            self.parent.backpropagate(value)
+            self.parent.backpropagate(-value)
 
     def reset_mcts(self) -> None:
         """Reset the variables used in MCTS.
