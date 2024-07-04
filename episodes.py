@@ -48,21 +48,72 @@ class RandomSelfPlay:
         return self.game
 
 
-class MctsSelfPlay:
+class MCTSSelfPlay:
     """An episode designed to test and debug MCTS or generating data for network training."""
-    def __init__(self, base_iter):
-        self.game = GameNode()
+    def __init__(self, base_iter, show=False, board=None):
+        if board is None:
+            self.game = GameNode()
+        else:
+            self.game = GameNode(board=board)
         self.base_iter = base_iter
+        self.show = show
 
     def play(self):
         """Play the game until termination."""
+        if self.show:
+            display = graphics.initialize()
+            graphics.refresh(self.game.board, display)
+
         while not self.game.is_terminal:
             self.game = mcts.run_mcts(self.game, base_iter=self.base_iter)
+            if self.show:
+                graphics.refresh(self.game.board, display)
+                time.sleep(0.5)
 
         return self.game
 
 
-class HumanVMcts:
+class MCTSVRandom:
+    def __init__(self, base_iter, show=False, board=None):
+        if board is None:
+            self.game = GameNode()
+        else:
+            self.game = GameNode(board=board)
+        self.base_iter = base_iter
+        self.show = show
+        self.attacker = ai.RandomAI(player=1)
+        self.defender = "MCTS"
+        self.device = 'cpu'
+
+    def play(self):
+        """Play the game until termination."""
+        if self.show:
+            display = graphics.initialize()
+            graphics.refresh(self.game.board, display)
+
+        while not self.game.is_terminal:
+
+            if self.game.player == 1:
+                action_space = self.game.action_space
+                action_selected, prob = self.attacker.select_action(self.game.board,
+                                                                    action_space,
+                                                                    device=self.device)
+                _ = self.attacker.predict_value(self.game.board, device=self.device)
+                self.game = self.game.step(int(action_selected))
+
+            elif self.game.player == 0:
+                self.game = mcts.run_mcts(self.game, base_iter=self.base_iter)
+            else:
+                raise Exception("Unknown player")
+
+            if self.show:
+                graphics.refresh(self.game.board, display)
+                time.sleep(0.5)
+
+        return self.game
+
+
+class HumanVMCTS:
     """A game in which a human player will play against an MCTS-based AI."""
     def __init__(self, base_iter=10, human=1):
         self.game = GameNode()
@@ -80,10 +131,10 @@ class HumanVMcts:
         """Play the game until termination, alternating between MCTS and human input."""
         selected = None
         display = graphics.initialize()
+        graphics.refresh(self.game.board, display, selected)
 
         while not self.game.is_terminal:
             print(f"Player: {self.game.player}")
-            graphics.refresh(self.game.board, display, selected)
 
             # The human's turn
             if self.game.player == self.human:
@@ -157,3 +208,9 @@ class HumanVMcts:
             # AI's turn
             else:
                 self.game = mcts.run_mcts(self.game, base_iter=self.base_iter)
+
+            # Update the display
+            graphics.refresh(self.game.board, display)
+            print(self.game.board)
+
+        print(f"Winner: {self.game.winner}")
