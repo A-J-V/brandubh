@@ -49,75 +49,7 @@ def expand_child(node):
     return expanded_child
 
 
-def check_quiescence_defender(node):
-    king_loc = np.where(node.board == 3)
-    try:
-        king_r, king_c = king_loc[0].item(), king_loc[1].item()
-    except Exception as e:
-        print(king_loc)
-        print(node.board)
-        print(node.piece_counts)
-        raise e
-    if king_c == 0 or king_c == 6:
-        up_to_go = king_r - 1
-        down_to_go = 11 - king_r
-        if node.action_space[up_to_go * 7 * 7 + king_r * 7 + king_c] == 1:
-            return True
-        elif node.action_space[down_to_go * 7 * 7 + king_r * 7 + king_c] == 1:
-            return True
-
-    elif king_r == 0 or king_r == 6:
-        left_to_go = 11 + king_c
-        right_to_go = 23 - king_c
-        if node.action_space[left_to_go * 7 * 7 + king_r * 7 + king_c] == 1:
-            return True
-        elif node.action_space[right_to_go * 7 * 7 + king_r * 7 + king_c] == 1:
-            return True
-    else:
-        return False
-
-
-def check_quiescence_attacker(node):
-    king_loc = np.where(node.board == 3)
-    king_r, king_c = king_loc[0].item(), king_loc[1].item()
-
-    def scan_for_attackers(start_row, start_col):
-        for (dr, dc) in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            tr, tc = start_row, start_col
-            # If we can walk from the blank tile in any direction and bump an attacker, that attacker could
-            # capture the King. Therefore, the Attackers have imminent victory, return True.
-            while True:
-                tr += dr
-                tc += dc
-                if (0 <= tr <= 6) and (0 <= tc <= 6) and node.board[tr, tc] == 0:
-                    continue
-                elif (0 <= tr <= 6) and (0 <= tc <= 6) and node.board[tr, tc] == 1:
-                    return True
-                else:
-                    break
-        return False
-
-    # The attackers can win immediately if the king has an attacker (or corner) next to him,
-    # and the attackers can move an attacker to flank the king.
-    if 0 < king_r < 6:
-        if node.board[king_r - 1, king_c] == node.ATTACKER or node.board[king_r - 1, king_c] == node.CORNER:
-            if node.board[king_r + 1, king_c] == node.BLANK and scan_for_attackers(king_r + 1, king_c):
-                return True
-        elif node.board[king_r + 1, king_c] == node.ATTACKER or node.board[king_r + 1, king_c] == node.CORNER:
-            if node.board[king_r - 1, king_c] == node.BLANK and scan_for_attackers(king_r - 1, king_c):
-                return True
-    elif 0 < king_c < 6:
-        if node.board[king_r, king_c - 1] == node.ATTACKER or node.board[king_r, king_c - 1] == node.CORNER:
-            if node.board[king_r, king_c + 1] == node.BLANK and scan_for_attackers(king_r, king_c + 1):
-                return True
-        elif node.board[king_r, king_c + 1] == node.ATTACKER or node.board[king_r, king_c + 1] == node.CORNER:
-            if node.board[king_r, king_c - 1] == node.BLANK and scan_for_attackers(king_r, king_c - 1):
-                return True
-    else:
-        return False
-
-
-def rollout(node, caller, use_quiescence):
+def rollout(node):
     """
     Perform a random rollout from node to termination.
     The intermediate game states between node and termination won't persist beyond the rollout.
@@ -128,13 +60,6 @@ def rollout(node, caller, use_quiescence):
 
     # If the node that was selected is already terminal, this loop will be skipped.
     while not rollout_node.is_terminal:
-        if use_quiescence:
-            if rollout_node.player == 0 and check_quiescence_defender(rollout_node):
-                rollout_node.winner = 0
-                continue
-            elif rollout_node.player == 1 and check_quiescence_attacker(rollout_node):
-                rollout_node.winner = 1
-                continue
         try:
             action = random.choice(rollout_node.unexpanded_children)
         except Exception as e:
@@ -144,11 +69,14 @@ def rollout(node, caller, use_quiescence):
 
         rollout_node = rollout_node.step(action)
 
-    # Backprop the reward up the game tree based on whether the caller who started MCTS won the rollout.
-    if caller == rollout_node.winner:
-        node.backpropagate(value=1)
-    else:
+    # Backprop the reward up the game tree based on whether the node from which the rollout began won.
+    # NOTE! The value of a node is the estimated value of choosing that node as an action by the PREVIOUS player.
+    # Therefore, if we start a rollout from an expanded defender node and the defenders win, that is NEGATIVE,
+    # because they attackers don't want to choose that node if the defenders are likely to win from it.
+    if node.player == rollout_node.winner:
         node.backpropagate(value=-1)
+    else:
+        node.backpropagate(value=1)
 
 
 def best_child(node):
@@ -181,15 +109,7 @@ def run_mcts(root_node, base_iter):
                 policy_counts[node.action_index] += 1
 
         # 3) Simulation and Backpropagation
-        if node.is_terminal:
-            use_quiescence = False
-        elif node.player == 0 and check_quiescence_defender(node):
-            use_quiescence = False
-        elif node.player == 1 and check_quiescence_attacker(node):
-            use_quiescence = False
-        else:
-            use_quiescence = True
-        rollout(node, caller=root_node.player, use_quiescence=use_quiescence)
+        rollout(node)
     root_node.policy = policy_counts
     root_node.legal_actions = root_node.action_space
     return best_child(root_node)
