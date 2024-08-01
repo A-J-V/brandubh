@@ -6,6 +6,7 @@ import graphics
 import pygame
 from input import identify_clicked_cell, convert_clicks_to_action
 import time
+from ai import *
 
 
 class RandomSelfPlay:
@@ -214,3 +215,86 @@ class HumanVMCTS:
             print(self.game.board)
 
         print(f"Winner: {self.game.winner}")
+
+
+class MCTSVDeepAgent:
+    """An episode designed to test and debug deep RL agents."""
+    def __init__(self, base_iter, show=False, board=None, deep_player=1):
+        if board is None:
+            self.game = GameNode()
+        else:
+            self.game = GameNode(board=board)
+        self.base_iter = base_iter
+        self.show = show
+        self.deep_player = deep_player
+        if deep_player == 1:
+            self.model = load_agent(player='attacker')
+        else:
+            self.model = load_agent(player='defender')
+
+    def play(self):
+        """Play the game until termination."""
+        if self.show:
+            display = graphics.initialize()
+            graphics.refresh(self.game.board, display)
+
+        while not self.game.is_terminal:
+            if self.game.player == self.deep_player:
+                game_state = self.game.board.flatten()
+                game_state = torch.Tensor(game_state).float().unsqueeze(0)
+                action_space = self.game.action_space
+                action_space = torch.Tensor(action_space).float().unsqueeze(0)
+                action = torch.argmax(self.model.predict_probs(game_state.to('cuda'), action_space.to('cuda'))).item()
+                self.game = self.game.step(action)
+            else:
+                self.game = mcts.run_mcts(self.game, base_iter=self.base_iter)
+            if self.show:
+                graphics.refresh(self.game.board, display)
+                time.sleep(0.5)
+
+        return self.game
+
+class DeepSelfPlay:
+    """An episode designed to test and debug deep RL agents."""
+    def __init__(self, show=False, board=None):
+        if board is None:
+            self.game = GameNode()
+        else:
+            self.game = GameNode(board=board)
+        self.show = show
+        self.attacker = load_agent(player='attacker')
+        self.defender = load_agent(player='defender')
+        self.turn = 0
+
+    def play(self):
+        """Play the game until termination."""
+        if self.show:
+            display = graphics.initialize()
+            graphics.refresh(self.game.board, display)
+
+        while not self.game.is_terminal:
+            self.turn += 1
+            if self.game.player == 1:
+                game_state = self.game.board.flatten()
+                game_state = torch.Tensor(game_state).float().unsqueeze(0)
+                action_space = self.game.action_space
+                action_space = torch.Tensor(action_space).float().unsqueeze(0)
+                action = torch.argmax(self.attacker.predict_probs(game_state.to('cuda'), action_space.to('cuda'))).item()
+                self.game = self.game.step(action)
+            else:
+                game_state = self.game.board.flatten()
+                game_state = torch.Tensor(game_state).float().unsqueeze(0)
+                action_space = self.game.action_space
+                action_space = torch.Tensor(action_space).float().unsqueeze(0)
+                action = torch.argmax(self.defender.predict_probs(game_state.to('cuda'), action_space.to('cuda'))).item()
+                self.game = self.game.step(action)
+            if self.show:
+                graphics.refresh(self.game.board, display)
+                time.sleep(0.5)
+
+            # Draw if the game gets stuck
+            if self.turn > 100:
+                self.game.winner = -1
+                return self.game
+
+        return self.game
