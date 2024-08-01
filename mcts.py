@@ -72,7 +72,7 @@ def rollout(node):
     # Backprop the reward up the game tree based on whether the node from which the rollout began won.
     # NOTE! The value of a node is the estimated value of choosing that node as an action by the PREVIOUS player.
     # Therefore, if we start a rollout from an expanded defender node and the defenders win, that is NEGATIVE,
-    # because they attackers don't want to choose that node if the defenders are likely to win from it.
+    # because the attackers don't want to choose that node if the defenders are likely to win from it.
     if node.player == rollout_node.winner:
         node.backpropagate(value=-1)
     else:
@@ -88,7 +88,14 @@ def best_child(node):
     return best
 
 
-def run_mcts(root_node, base_iter):
+def run_mcts(root_node, base_iter: int):
+    """Run the Monte Carlo Tree Search algorithm.
+
+    :param root_node: The root node of the MCTS tree.
+    :type root_node: GameNode
+    :param base_iter: The number of base iterations.
+    :type base_iter: int
+    """
     num_legal_moves = np.sum(root_node.action_space == 1)
     num_iter = base_iter * num_legal_moves
     policy_counts = np.zeros_like(root_node.action_space)
