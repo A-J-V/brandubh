@@ -120,11 +120,67 @@ class AttentionAgent(nn.Module):
         return action_selection, selected_prob
 
 
+class ValueFunction(nn.Module):
+    def __init__(self, player, token_count=5, n_heads=1, embedding_dim=16, dropout=0.0):
+        super().__init__()
+        self.player = player
+        self.token_count = token_count
+        board_size = 7
+        self.position_tensor1 = nn.Parameter(torch.randn(board_size * board_size, embedding_dim)).unsqueeze(0)
+        self.position_tensor2 = nn.Parameter(torch.randn(board_size * board_size, embedding_dim)).unsqueeze(0)
+        self.embedding = nn.Embedding(num_embeddings=token_count,
+                                      embedding_dim=embedding_dim,
+                                      )
+
+        self.attn = TransformerBlock(embedding_dim, n_heads, dropout=dropout)
+        self.attn2 = TransformerBlock(embedding_dim, n_heads, dropout=dropout)
+        self.attn3 = TransformerBlock(embedding_dim, n_heads, dropout=dropout)
+
+        self.output = nn.Sequential(
+            nn.Linear(embedding_dim * board_size * board_size, 1),
+            nn.Sigmoid(),
+        )
+
+    def to(self, device):
+        self.position_tensor1 = self.position_tensor1.to(device)
+        self.position_tensor2 = self.position_tensor2.to(device)
+        return super().to(device)
+
+    def forward(self, x, player):
+        batch_size = x.size(0)
+        x = x.long().view(batch_size, -1)
+
+        x = self.embedding(x)
+
+        x = x + self.position_tensor1
+        player = player.view(batch_size, 1, 1)
+        x = x + (self.position_tensor2 * player)
+
+        x = self.attn(x)
+        x = self.attn2(x)
+        x = self.attn3(x)
+        x = x.view(x.size(0), -1)
+
+        output = self.output(x)
+
+        return output
+
+
+def load_value_function(player: str = 1):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = ValueFunction(player, embedding_dim=24)
+    model = model.to(device)
+    model.eval()
+    return model
+
+
 def load_agent(player: str = "attacker"):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = AttentionAgent(player, embedding_dim=24)
+    model = model.to(device)
+    model.eval()
     if player == "attacker":
         model.load_state_dict(torch.load("./assets/attacker_agent_v1.pth"))
     else:
         model.load_state_dict(torch.load("./assets/defender_agent_v1.pth"))
-    return model.to(device)
+    return model

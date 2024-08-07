@@ -1,5 +1,6 @@
 import numpy as np
 import random
+import torch
 
 
 def argmax(lst: list):
@@ -87,6 +88,23 @@ def rollout(node):
         node.backpropagate(value=1)
 
 
+def pseudo_rollout(node, model, device):
+    """Uses a neural network value function to predict state value"""
+    player = node.player
+    state = node.board.flatten()
+    state_tensor = torch.tensor(state).float().unsqueeze(0).to(device)
+    player_tensor = torch.tensor(player).float().to(device)
+    value_pred = model(state_tensor, player_tensor)
+    value_pred = value_pred.item()
+
+    if player == 1:
+        node.backpropagate(1 - value_pred)
+    elif player == 0:
+        node.backpropagate(value_pred)
+    else:
+        raise Exception("Invalid player")
+
+
 def best_child(node):
     """Return the 'best' child according to number of visits."""
     visit_counts = [child.visits for child in node.children]
@@ -125,6 +143,46 @@ def run_mcts(root_node, base_iter: int):
 
         # 3) Simulation and Backpropagation
         rollout(node)
+
+    root_node.policy = policy_counts
+    root_node.legal_actions = root_node.action_space
+    return best_child(root_node)
+
+
+def run_neural_mcts(root_node, value_function, device: str, base_iter: int):
+    """Run the Monte Carlo Tree Search algorithm with deep learning modifications inspired by AlphaZero.
+
+    :param root_node: The root node of the MCTS tree.
+    :type root_node: GameNode
+    :param value_function: The Pytorch value network.
+    :type value_function: nn.Module
+    :param device: The device on which the value_function should be placed.
+    :type device: str
+    :param base_iter: The number of base iterations.
+    :type base_iter: int
+    """
+    num_legal_moves = np.sum(root_node.action_space == 1)
+    num_iter = base_iter * num_legal_moves
+    policy_counts = np.zeros_like(root_node.action_space)
+
+    for iteration in range(num_iter):
+        # 1) Selection
+        node = root_node
+        while not node.is_terminal and node.is_fully_expanded:
+            need_policy = True if node == root_node else False
+            node = select_node(node)
+            if need_policy:
+                policy_counts[node.action_index] += 1
+
+        # 2) Expansion
+        if not node.is_terminal and not node.is_fully_expanded:
+            need_policy = True if node == root_node else False
+            node = expand_all_children(node)
+            if need_policy:
+                policy_counts[node.action_index] += 1
+
+        # 3) Simulation and Backpropagation
+        pseudo_rollout(node, model=value_function, device=device)
 
     root_node.policy = policy_counts
     root_node.legal_actions = root_node.action_space

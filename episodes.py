@@ -254,6 +254,7 @@ class MCTSVDeepAgent:
 
         return self.game
 
+
 class DeepSelfPlay:
     """An episode designed to test and debug deep RL agents."""
     def __init__(self, show=False, board=None):
@@ -288,6 +289,46 @@ class DeepSelfPlay:
                 action_space = torch.Tensor(action_space).float().unsqueeze(0)
                 action = torch.argmax(self.defender.predict_probs(game_state.to('cuda'), action_space.to('cuda'))).item()
                 self.game = self.game.step(action)
+            if self.show:
+                graphics.refresh(self.game.board, display)
+                time.sleep(0.5)
+
+            # Draw if the game gets stuck
+            if self.turn > 100:
+                self.game.winner = -1
+                return self.game
+
+        return self.game
+
+
+class NeuralMCTSSelfPlay:
+    """An episode designed to test and debug MCTS or generating data for network training."""
+    def __init__(self, base_iter, show=False, board=None):
+        if board is None:
+            self.game = GameNode()
+        else:
+            self.game = GameNode(board=board)
+        self.base_iter = base_iter
+        self.value_function = ai.load_value_function()
+        self.show = show
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.turn = 0
+        #print(f"Running Neural MCTS game on {self.device}.")
+
+    def play(self):
+        """Play the game until termination."""
+        if self.show:
+            display = graphics.initialize()
+            graphics.refresh(self.game.board, display)
+
+        while not self.game.is_terminal:
+            self.turn += 1
+
+            self.game = mcts.run_neural_mcts(self.game,
+                                             value_function=self.value_function,
+                                             device=self.device,
+                                             base_iter=self.base_iter,
+                                             )
             if self.show:
                 graphics.refresh(self.game.board, display)
                 time.sleep(0.5)
