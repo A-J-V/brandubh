@@ -49,6 +49,14 @@ def expand_child(node):
     return expanded_child
 
 
+def expand_all_children(node):
+    """Take all children from node.unexpanded_children and expand them into new nodes, return a random one."""
+    for i, action in enumerate(node.unexpanded_children[:]):
+        node.step(action)
+    node.unexpanded_children = []
+    return random.choice(node.children)
+
+
 def rollout(node):
     """
     Perform a random rollout from node to termination.
@@ -111,12 +119,13 @@ def run_mcts(root_node, base_iter: int):
         # 2) Expansion
         if not node.is_terminal and not node.is_fully_expanded:
             need_policy = True if node == root_node else False
-            node = expand_child(node)
+            node = expand_all_children(node)
             if need_policy:
                 policy_counts[node.action_index] += 1
 
         # 3) Simulation and Backpropagation
         rollout(node)
+
     root_node.policy = policy_counts
     root_node.legal_actions = root_node.action_space
     return best_child(root_node)
