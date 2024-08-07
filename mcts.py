@@ -82,7 +82,7 @@ def rollout(node):
     # Therefore, if we start a rollout from an expanded defender node and the defenders win, that is NEGATIVE,
     # because the attackers don't want to choose that node if the defenders are likely to win from it.
     if node.player == rollout_node.winner:
-        node.backpropagate(value=-1)
+        node.backpropagate(value=0)
     else:
         node.backpropagate(value=1)
 

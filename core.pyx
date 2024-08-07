@@ -398,7 +398,7 @@ class GameNode:
         self.visits += 1
         self.value += value
         if self.parent is not None:
-            self.parent.backpropagate(-value)
+            self.parent.backpropagate(1 - value)
 
     def reset_mcts(self) -> None:
         """Reset the variables used in MCTS.
