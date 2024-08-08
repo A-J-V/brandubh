@@ -1,6 +1,7 @@
 import numpy as np
 import random
 import torch
+from typing import Callable
 
 
 def argmax(lst: list):
@@ -21,7 +22,7 @@ def argmax(lst: list):
 
 
 def ucb1(node, c: float = 2.0):
-    """Calculate the UCB1 value"""
+    """Calculate the UCB1 value."""
     if node.visits == 0:
         return float('inf')
     else:
@@ -31,11 +32,23 @@ def ucb1(node, c: float = 2.0):
         )
 
 
-def select_node(node):
+def PUCT(node, c: float = 1.5):
+    """Calculate the PUCT value based on AlphaZero."""
+    if node.visits > 0:
+        q_value = node.value / node.visits
+    else:
+        q_value = 0
+
+    puct_value = q_value + c * node.prior * ((node.parent.visits ** 0.5) / (1 + node.visits))
+
+    return puct_value
+
+
+def select_node(node, func: Callable = ucb1):
     best_value = -float('inf')
     best_child = None
     for child in node.children:
-        value = ucb1(child)
+        value = func(child)
         if value > best_value:
             best_value = value
             best_child = child
@@ -54,6 +67,22 @@ def expand_all_children(node):
     """Take all children from node.unexpanded_children and expand them into new nodes, return a random one."""
     for i, action in enumerate(node.unexpanded_children[:]):
         node.step(action)
+    node.unexpanded_children = []
+    return random.choice(node.children)
+
+
+def expand_predict_all(node, model: torch.nn.Module, device: str):
+    """Expand all child nodes, assign prior values using policy prediction, and return the highest value."""
+    action_space = node.action_space
+    action_tensor = torch.tensor(action_space).float().unsqueeze(0).to(device)
+    state = node.board.flatten()
+    state_tensor = torch.tensor(state).float().unsqueeze(0).to(device)
+    with torch.no_grad():
+        pred_prob = model.predict_probs(state_tensor, action_tensor).cpu().squeeze().numpy()
+    for i, action in enumerate(node.unexpanded_children[:]):
+        child = node.step(action)
+        child.prior = pred_prob[action]
+
     node.unexpanded_children = []
     return random.choice(node.children)
 
@@ -94,7 +123,8 @@ def pseudo_rollout(node, model, device):
     state = node.board.flatten()
     state_tensor = torch.tensor(state).float().unsqueeze(0).to(device)
     player_tensor = torch.tensor(player).float().to(device)
-    value_pred = model(state_tensor, player_tensor)
+    with torch.no_grad():
+        value_pred = model(state_tensor, player_tensor)
     value_pred = value_pred.item()
 
     if player == 1:
@@ -149,7 +179,7 @@ def run_mcts(root_node, base_iter: int):
     return best_child(root_node)
 
 
-def run_neural_mcts(root_node, value_function, device: str, base_iter: int):
+def run_neural_mcts(root_node, policy_function, value_function, device: str, base_iter: int):
     """Run the Monte Carlo Tree Search algorithm with deep learning modifications inspired by AlphaZero.
 
     :param root_node: The root node of the MCTS tree.
@@ -170,14 +200,14 @@ def run_neural_mcts(root_node, value_function, device: str, base_iter: int):
         node = root_node
         while not node.is_terminal and node.is_fully_expanded:
             need_policy = True if node == root_node else False
-            node = select_node(node)
+            node = select_node(node, func=PUCT)
             if need_policy:
                 policy_counts[node.action_index] += 1
 
         # 2) Expansion
         if not node.is_terminal and not node.is_fully_expanded:
             need_policy = True if node == root_node else False
-            node = expand_all_children(node)
+            node = expand_predict_all(node, model=policy_function, device=device)
             if need_policy:
                 policy_counts[node.action_index] += 1
 
