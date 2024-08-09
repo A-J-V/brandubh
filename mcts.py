@@ -32,7 +32,7 @@ def ucb1(node, c: float = 2.0):
         )
 
 
-def PUCT(node, c: float = 1.5):
+def PUCT(node, c: float = 2.0):
     """Calculate the PUCT value based on AlphaZero."""
     if node.visits > 0:
         q_value = node.value / node.visits
@@ -82,7 +82,6 @@ def expand_predict_all(node, model: torch.nn.Module, device: str):
     for i, action in enumerate(node.unexpanded_children[:]):
         child = node.step(action)
         child.prior = pred_prob[action]
-
     node.unexpanded_children = []
     return random.choice(node.children)
 
@@ -179,11 +178,15 @@ def run_mcts(root_node, base_iter: int):
     return best_child(root_node)
 
 
-def run_neural_mcts(root_node, policy_function, value_function, device: str, base_iter: int):
-    """Run the Monte Carlo Tree Search algorithm with deep learning modifications inspired by AlphaZero.
+def run_neural_mcts(root_node, attacker_policy, defender_policy, value_function, device: str, base_iter: int):
+    """Run the Monte Carlo Tree Search algorithm with deep learning guidance inspired by AlphaZero.
 
     :param root_node: The root node of the MCTS tree.
     :type root_node: GameNode
+    :param attacker_policy: The Pytorch policy network for the attacker.
+    :type value_function: nn.Module
+    :param defender_policy: The Pytorch policy network for the defender.
+    :type value_function: nn.Module
     :param value_function: The Pytorch value network.
     :type value_function: nn.Module
     :param device: The device on which the value_function should be placed.
@@ -207,13 +210,30 @@ def run_neural_mcts(root_node, policy_function, value_function, device: str, bas
         # 2) Expansion
         if not node.is_terminal and not node.is_fully_expanded:
             need_policy = True if node == root_node else False
-            node = expand_predict_all(node, model=policy_function, device=device)
+            node = expand_predict_all(node,
+                                      model=attacker_policy if node.player == 1 else defender_policy,
+                                      device=device)
             if need_policy:
                 policy_counts[node.action_index] += 1
 
         # 3) Simulation and Backpropagation
         pseudo_rollout(node, model=value_function, device=device)
 
+    # Assign some finalized attributes to the root_node before returning the next node selection.
+    state = root_node.board.flatten()
+    player = root_node.player
+    state_tensor = torch.tensor(state).float().unsqueeze(0).to(device)
+    player_tensor = torch.tensor(player).float().to(device)
+    with torch.no_grad():
+        value_pred = value_function(state_tensor, player_tensor)
+    value_pred = value_pred.item()
+
+    root_node.value_estimate = value_pred
     root_node.policy = policy_counts
     root_node.legal_actions = root_node.action_space
-    return best_child(root_node)
+
+    next_node = best_child(root_node)
+    root_node.selected_action = next_node.action_index
+    root_node.selected_action_prob = policy_counts[next_node.action_index] / num_iter
+
+    return next_node
