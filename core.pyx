@@ -83,8 +83,11 @@ class GameNode:
         self.children = []
         self.parent = parent
 
-        # This is for neural MCTS
-        self.prior = 0.5
+        # This is for neural MCTS and RL training
+        self.prior = None
+        self.value_estimate = None
+        self.selected_action = None
+        self.selected_action_prob = None
 
         # This is used for recording
         self.legal_actions = None
