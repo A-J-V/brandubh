@@ -75,7 +75,7 @@ def expand_predict_all(node, model: torch.nn.Module, device: str):
     """Expand all child nodes, assign prior values using policy prediction, and return the highest value."""
     action_space = node.action_space
     action_tensor = torch.tensor(action_space).float().unsqueeze(0).to(device)
-    state = np.append(node.board.flatten(), node.player)
+    state = node.board.flatten()
     state_tensor = torch.tensor(state).float().unsqueeze(0).to(device)
     with torch.no_grad():
         pred_prob = model.predict_probs(state_tensor, action_tensor).cpu().squeeze().numpy()
@@ -414,7 +414,6 @@ def batch_neural_mcts(root_nodes,
         root_node.value_estimate = value_preds[i].item()
         root_node.policy = batch_policy_counts[i, :]
         root_node.legal_actions = root_node.action_space
-        #print(f"root_node is terminal: {root_node.is_terminal}")
 
         next_node = probabilistic_child(root_node)
         root_node.selected_action = next_node.action_index
