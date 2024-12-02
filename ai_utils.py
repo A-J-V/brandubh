@@ -1,5 +1,12 @@
+"""These are some tools used to help gather data and train the AI"""
+
+from ai import load_agent, load_value_function
 import numpy as np
+import os
 import pandas as pd
+import torch as torch
+from torch import nn
+from torch.utils.data import Dataset, DataLoader
 
 
 class GameRecorder:
@@ -141,3 +148,236 @@ class NeuralGameRecorder:
         game_record['defender_gae'] = self.calculate_GAE(game_record['defender_td_error'])
 
         return game_record
+
+
+class PPOBrandubhDataset(Dataset):
+
+    def __init__(self, data_path, player=1):
+        df_list = []
+        print("Loading dataset...")
+        for file in (os.listdir(data_path)):
+            record_path = os.path.join(data_path, file)
+            df_list.append(
+                pd.read_csv(
+                    record_path,
+                    on_bad_lines='skip'))
+
+        self.player = player
+        self.data = pd.concat(df_list, ignore_index=True)
+
+        if player == 1:
+            self.data = self.data.loc[self.data['player'] == 1]
+        elif player == 0:
+            self.data = self.data.loc[self.data['player'] == 0]
+
+        self.data = self.data.to_numpy(dtype=np.float32, copy=True)
+        print(f"Loaded {len(self.data)} examples.")
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        state_space = torch.tensor(self.data[idx][:49]).float()
+        action_space = torch.tensor(self.data[idx][1225:2401]).float()
+        action_taken = torch.tensor(self.data[idx][2403]).type(torch.LongTensor)
+        action_prob = torch.tensor(self.data[idx][2404]).float()
+        gae = torch.tensor(self.data[idx][-1]).float() if self.player == 0 else torch.tensor(self.data[idx][-2]).float()
+
+        return (state_space,
+                action_space,
+                action_taken,
+                action_prob,
+                gae)
+
+
+class ValueBrandubhDataset(Dataset):
+
+    def __init__(self, data_path):
+        df_list = []
+        print("Loading dataset...")
+        for file in (os.listdir(data_path)):
+            record_path = os.path.join(data_path, file)
+            df_list.append(
+                pd.read_csv(
+                    record_path,
+                    on_bad_lines='skip'))
+
+        self.data = pd.concat(df_list, ignore_index=True)
+        self.data = self.data.loc[self.data['winner'] != -1]
+        self.data = self.data.to_numpy(dtype=np.float32, copy=True)
+        print(f"Loaded {len(self.data)} examples.")
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        state_space = torch.tensor(self.data[idx][:49]).float()
+        player = torch.tensor(self.data[idx][2402]).float()
+        winner = torch.tensor(self.data[idx][2405]).float()
+
+        return (state_space,
+                player,
+                winner,
+               )
+
+
+class PPOLoss(nn.Module):
+    def __init__(self, e=0.2, c=None):
+        super().__init__()
+        self.e = e
+        self.c = c
+
+    def forward(self,
+                policy_probs,
+                action_taken,
+                action_prob,
+                gae):
+
+        # For PPO, we want to compare the probability of the previously taken action under the old
+        # versus new policy, so we need to know which action was taken and what its probability is
+        # under the new policy.
+        np_prob = torch.gather(policy_probs, 1, action_taken.unsqueeze(-1)).squeeze()
+
+        ratio = (np_prob / action_prob) * gae
+        clipped_ratio = torch.clamp(ratio, 1 - self.e, 1 + self.e) * gae
+        clipped_loss = torch.min(ratio, clipped_ratio)
+        clipped_loss = -clipped_loss.mean()
+
+        total_loss = clipped_loss
+
+        if self.c is not None:
+            entropy = -(policy_probs * (policy_probs + 0.0000001).log()).sum(-1)
+            total_loss -= self.c * entropy.mean()
+
+        return total_loss
+
+
+def train_agent(policy_network, loss_fn, device, dataloader, optimizer):
+    policy_network.train()
+
+    for batch_idx, (state_space,
+                    action_space,
+                    action_taken,
+                    action_prob,
+                    gae) in enumerate(dataloader):
+        state_space = state_space.to(device)
+        action_space = action_space.to(device)
+        action_taken = action_taken.to(device)
+        action_prob = action_prob.to(device)
+        gae = gae.to(device)
+        optimizer.zero_grad()
+
+        policy_probs = policy_network.predict_probs(state_space, action_space)
+
+        loss = loss_fn(policy_probs,
+                       action_taken,
+                       action_prob,
+                       gae)
+
+        loss.backward()
+
+        optimizer.step()
+
+
+def train_value(value_network, loss_fn, device, dataloader, optimizer):
+    value_network.train()
+
+    for batch_idx, (state_space,
+                    player,
+                    winner,
+                    ) in enumerate(dataloader):
+        state_space = state_space.to(device)
+        player = player.to(device).unsqueeze(1)
+
+        winner = winner.to(device).unsqueeze(1)
+
+        optimizer.zero_grad()
+
+        value_est = value_network.forward(state_space, player)
+
+        loss = loss_fn(value_est,
+                       winner,
+                       )
+
+        loss.backward()
+
+        optimizer.step()
+
+
+def train_all(attacker_path: str,
+              defender_path: str,
+              value_path: str,
+              data_path: str,
+              checkpoint_path: str,
+              epochs: int,
+              iteration: int,
+              device: str = 'cuda',
+              ):
+    """Run a complete training iteration on all networks and checkpoint them
+
+    :param attacker_path: The path to the neural network for the attacker policy
+    :type attacker_path: str
+    :param defender_path: The path to the neural network for the defender policy
+    :type defender_path: str
+    :param value_path: The path to the neural network for the value function
+    :type value_path: str
+    :param data_path: The path to the data to use for this training
+    :type data_path: str
+    :param checkpoint_path: The path to the folder to save network checkpoints to
+    :type checkpoint_path: str
+    :param epochs: The number of epochs to train over the most recently generated data
+    :type epochs: int
+    :param iteration: Which iteration in the global training pipeline this is. Used for checkpoint versioning.
+    :type iteration: int
+    :param device: Which device to use while training, 'cpu' or 'cuda'
+    :type device: str
+    """
+
+    print("Running a training update...")
+
+    attacker_policy_network = load_agent(attacker_path, player=1)
+    defender_policy_network = load_agent(defender_path, player=0)
+    value_network = load_value_function(value_path)
+
+    attacker_optimizer = torch.optim.Adam(attacker_policy_network.parameters(), lr=0.0002,)
+    defender_optimizer = torch.optim.Adam(defender_policy_network.parameters(), lr=0.0002, )
+    value_optimizer = torch.optim.Adam(value_network.parameters(), lr=0.0002, )
+
+    # Step 1: Load all datasets
+    attacker_dataset = PPOBrandubhDataset(data_path=data_path,
+                                          player=1,
+                                          )
+    defender_dataset = PPOBrandubhDataset(data_path=data_path,
+                                          player=0,
+                                          )
+    value_dataset = ValueBrandubhDataset(data_path=data_path)
+
+    # Step 2: Prepare all dataloaders
+    attacker_loader = DataLoader(attacker_dataset,
+                                 batch_size=1024,
+                                 shuffle=True,
+                                 )
+    defender_loader = DataLoader(defender_dataset,
+                                 batch_size=1024,
+                                 shuffle=True,
+                                 )
+    value_loader = DataLoader(value_dataset,
+                              batch_size=1024,
+                              shuffle=True,
+                              )
+
+    policy_loss_fn = PPOLoss(c=0.025)
+    value_loss_fn = nn.BCELoss()
+
+    # Step 3: Train both policy networks and the value network
+    for epoch in range(epochs):
+        train_agent(attacker_policy_network, policy_loss_fn, device, attacker_loader, attacker_optimizer)
+        train_agent(defender_policy_network, policy_loss_fn, device, defender_loader, defender_optimizer)
+        train_value(value_network, value_loss_fn, device, value_loader, value_optimizer)
+
+    # Step 4: Checkpoint the networks
+    torch.save(attacker_policy_network.state_dict(), checkpoint_path + f"/attacker_cp{iteration + 1}.pth")
+    torch.save(defender_policy_network.state_dict(), checkpoint_path + f"/defender_cp{iteration + 1}.pth")
+    torch.save(value_network.state_dict(), checkpoint_path + f"/value_cp{iteration + 1}.pth")
+
+
