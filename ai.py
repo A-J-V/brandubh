@@ -55,7 +55,7 @@ class AttentionAgent(nn.Module):
         self.player = player
         self.token_count = token_count
         board_size = 7
-        self.position_tensor = nn.Parameter(torch.randn(board_size * board_size, embedding_dim)).unsqueeze(0)
+        self.position_tensor = nn.Parameter(torch.randn(board_size * board_size, embedding_dim).unsqueeze(0))
         self.embedding = nn.Embedding(num_embeddings=token_count,
                                       embedding_dim=embedding_dim,
                                       )
@@ -66,16 +66,14 @@ class AttentionAgent(nn.Module):
         self.policy = nn.Linear(embedding_dim * board_size * board_size,
                                 24 * board_size * board_size)
 
-    def to(self, device):
-        self.position_tensor = self.position_tensor.to(device)
-
-        return super().to(device)
-
     def forward(self, x):
         batch_size = x.size(0)
         x = x.long().view(batch_size, -1)
 
         x = self.embedding(x)
+        # assert x.shape == self.position_tensor.shape, (
+        #     f"Input shape {x.shape} does not match position tensor shape {self.position_tensor.shape}"
+        # )
         x = x + self.position_tensor
         x = self.attn(x)
         x = self.attn2(x)
@@ -126,8 +124,8 @@ class ValueFunction(nn.Module):
         self.player = player
         self.token_count = token_count
         board_size = 7
-        self.position_tensor1 = nn.Parameter(torch.randn(board_size * board_size, embedding_dim)).unsqueeze(0)
-        self.position_tensor2 = nn.Parameter(torch.randn(board_size * board_size, embedding_dim)).unsqueeze(0)
+        self.position_tensor1 = nn.Parameter(torch.randn(board_size * board_size, embedding_dim).unsqueeze(0))
+        self.position_tensor2 = nn.Parameter(torch.randn(board_size * board_size, embedding_dim).unsqueeze(0))
         self.embedding = nn.Embedding(num_embeddings=token_count,
                                       embedding_dim=embedding_dim,
                                       )
@@ -140,11 +138,6 @@ class ValueFunction(nn.Module):
             nn.Linear(embedding_dim * board_size * board_size, 1),
             nn.Sigmoid(),
         )
-
-    def to(self, device):
-        self.position_tensor1 = self.position_tensor1.to(device)
-        self.position_tensor2 = self.position_tensor2.to(device)
-        return super().to(device)
 
     def forward(self, x, player):
         batch_size = x.size(0)
@@ -165,10 +158,10 @@ class ValueFunction(nn.Module):
 
         return output
 
-
 def load_value_function(player: str = 1):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = ValueFunction(player, embedding_dim=24)
+    model.load_state_dict(torch.load("./assets/value_function_v1.pth"))
     model = model.to(device)
     model.eval()
     return model
@@ -177,10 +170,10 @@ def load_value_function(player: str = 1):
 def load_agent(player: str = "attacker"):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = AttentionAgent(player, embedding_dim=24)
-    model = model.to(device)
-    model.eval()
     if player == "attacker":
         model.load_state_dict(torch.load("./assets/attacker_agent_v1.pth"))
     else:
         model.load_state_dict(torch.load("./assets/defender_agent_v1.pth"))
+    model = model.to(device)
+    model.eval()
     return model
