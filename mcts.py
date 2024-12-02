@@ -392,7 +392,7 @@ def batch_neural_mcts(root_nodes,
         # If there are any nodes that needed to be expanded, expand them now and selected a child
         if expansion_queue:
             choices = batch_predict_all(expansion_queue, model0=defender_policy_function, model1=attacker_policy_function, device=device)
-            # TODO This needs to be thoroughly tested
+
             for i, (idx, need_policy) in enumerate(node_info):
                 selected_nodes[idx] = choices[i]
                 if need_policy:
