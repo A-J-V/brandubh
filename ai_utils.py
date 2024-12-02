@@ -72,8 +72,8 @@ class NeuralGameRecorder:
             self.extract(node.parent)
         return self
 
-    def get_td_error(self,
-                     v_est: np.ndarray,
+    @staticmethod
+    def get_td_error(v_est: np.ndarray,
                      v_est_next: np.ndarray,
                      player: int,
                      winner: int,
@@ -90,7 +90,8 @@ class NeuralGameRecorder:
         td_error = v_est_next - v_est + rewards
         return td_error
 
-    def calculate_GAE(self, td_error, gamma=0.99, lambda_=0.90):
+    @staticmethod
+    def calculate_GAE(td_error, gamma=0.99, lambda_=0.90):
         """Calculate the Generalized Advantage Estimate."""
         gae = []
         gae_t = 0
