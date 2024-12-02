@@ -119,9 +119,8 @@ class AttentionAgent(nn.Module):
 
 
 class ValueFunction(nn.Module):
-    def __init__(self, player, token_count=5, n_heads=1, embedding_dim=16, dropout=0.0):
+    def __init__(self, token_count=5, n_heads=1, embedding_dim=16, dropout=0.0):
         super().__init__()
-        self.player = player
         self.token_count = token_count
         board_size = 7
         self.position_tensor1 = nn.Parameter(torch.randn(board_size * board_size, embedding_dim).unsqueeze(0))
@@ -158,22 +157,20 @@ class ValueFunction(nn.Module):
 
         return output
 
-def load_value_function(player: str = 1):
+
+def load_value_function(value_path: str):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = ValueFunction(player, embedding_dim=24)
-    model.load_state_dict(torch.load("./assets/value_function_v1.pth"))
+    model = ValueFunction(embedding_dim=24)
+    model.load_state_dict(torch.load(f"/home/alexander/Data/brandubh/checkpoints/{value_path}.pth"))
     model = model.to(device)
     model.eval()
     return model
 
 
-def load_agent(player: str = "attacker"):
+def load_agent(model_path: str, player: int):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = AttentionAgent(player, embedding_dim=24)
-    if player == "attacker":
-        model.load_state_dict(torch.load("./assets/attacker_agent_v1.pth"))
-    else:
-        model.load_state_dict(torch.load("./assets/defender_agent_v1.pth"))
+    model.load_state_dict(torch.load(f"/home/alexander/Data/brandubh/checkpoints/{model_path}.pth"))
     model = model.to(device)
     model.eval()
     return model
