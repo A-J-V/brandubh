@@ -75,7 +75,7 @@ def expand_predict_all(node, model: torch.nn.Module, device: str):
     """Expand all child nodes, assign prior values using policy prediction, and return the highest value."""
     action_space = node.action_space
     action_tensor = torch.tensor(action_space).float().unsqueeze(0).to(device)
-    state = node.board.flatten()
+    state = np.append(node.board.flatten(), node.player)
     state_tensor = torch.tensor(state).float().unsqueeze(0).to(device)
     with torch.no_grad():
         pred_prob = model.predict_probs(state_tensor, action_tensor).cpu().squeeze().numpy()
@@ -84,6 +84,63 @@ def expand_predict_all(node, model: torch.nn.Module, device: str):
         child.prior = pred_prob[action]
     node.unexpanded_children = []
     return random.choice(node.children)
+
+
+def batch_predict_all(nodes, model0: torch.nn.Module, model1: torch.nn.Module, device: str):
+    """Expand all child nodes and run batch inference to assign priors to all."""
+    #print(f"len of nodes passed to batch_predict_all: {len(nodes)}")
+
+    # Separate nodes based on player
+    indices0, indices1 = [], []
+    nodes0, nodes1 = [], []
+    for idx, node in enumerate(nodes):
+        if node.player == 0:
+            indices0.append(idx)
+            nodes0.append(node)
+        else:
+            indices1.append(idx)
+            nodes1.append(node)
+
+    # Prepare a list to hold predictions in the original order
+    pred_prob_list = [None] * len(nodes)
+
+    # Process nodes for player 0
+    if nodes0:
+        action_space0 = np.array([node.action_space for node in nodes0])
+        action_tensor0 = torch.tensor(action_space0).float().to(device)
+        state0 = np.array([node.board.flatten() for node in nodes0])
+        state_tensor0 = torch.tensor(state0).float().to(device)
+        #print("action_tensor0 shape:", action_tensor0.shape)
+        #print("state_tensor0 shape:", state_tensor0.shape)
+        with torch.no_grad():
+            pred_prob0 = model0.predict_probs(state_tensor0, action_tensor0).cpu().numpy()
+            #print("pred_prob0 shape:", pred_prob0.shape)
+        for i, idx in enumerate(indices0):
+            pred_prob_list[idx] = pred_prob0[i]
+
+    # Process nodes for player 1
+    if nodes1:
+        action_space1 = np.array([node.action_space for node in nodes1])
+        action_tensor1 = torch.tensor(action_space1).float().to(device)
+        state1 = np.array([node.board.flatten() for node in nodes1])
+        state_tensor1 = torch.tensor(state1).float().to(device)
+        #print("action_tensor1 shape:", action_tensor1.shape)
+        #print("state_tensor1 shape:", state_tensor1.shape)
+        with torch.no_grad():
+            pred_prob1 = model1.predict_probs(state_tensor1, action_tensor1).cpu().numpy()
+            #print("pred_prob1 shape:", pred_prob1.shape)
+        for i, idx in enumerate(indices1):
+            pred_prob_list[idx] = pred_prob1[i]
+
+    # Assign priors and select choices
+    choices = []
+    for i, node in enumerate(nodes):
+        for action in node.unexpanded_children[:]:
+            child = node.step(action)
+            child.prior = pred_prob_list[i][action]
+        node.unexpanded_children = []
+        choices.append(random.choice(node.children))
+    return choices
 
 
 def rollout(node):
@@ -96,7 +153,13 @@ def rollout(node):
     rollout_node = node.clone()
 
     # If the node that was selected is already terminal, this loop will be skipped.
+    max_moves = 50000
+    move_num = 0
     while not rollout_node.is_terminal:
+        if move_num >= max_moves:
+            print(f"Rollout exceeded max of {max_moves}!")
+            node.backpropagate(value=0)
+            return
         try:
             action = random.choice(rollout_node.unexpanded_children)
         except Exception as e:
@@ -105,6 +168,7 @@ def rollout(node):
             raise e
 
         rollout_node = rollout_node.step(action)
+        move_num += 1
 
     # Backprop the reward up the game tree based on whether the node from which the rollout began won.
     # NOTE! The value of a node is the estimated value of choosing that node as an action by the PREVIOUS player.
@@ -117,7 +181,7 @@ def rollout(node):
 
 
 def pseudo_rollout(node, model, device):
-    """Uses a neural network value function to predict state value"""
+    """Use a neural network value function to predict state value"""
     player = node.player
     state = node.board.flatten()
     state_tensor = torch.tensor(state).float().unsqueeze(0).to(device)
@@ -134,6 +198,25 @@ def pseudo_rollout(node, model, device):
         raise Exception("Invalid player")
 
 
+def batch_pseudo_rollout(nodes, model, device):
+    """Use a neural network value function to predict a batch of state values."""
+    batch_size = len(nodes)
+    player = np.array([node.player for node in nodes])
+    state = np.array([node.board.flatten() for node in nodes])
+    state_tensor = torch.tensor(state).float().to(device)
+    player_tensor = torch.tensor(player).float().unsqueeze(1).to(device)
+    with torch.no_grad():
+        value_preds = model(state_tensor, player_tensor).squeeze(1)
+
+    for i in range(batch_size):
+        if player[i] == 1:
+            nodes[i].backpropagate(1 - value_preds[i].item())
+        elif player[i] == 0:
+            nodes[i].backpropagate(value_preds[i].item())
+        else:
+            raise Exception("Invalid player")
+
+
 def best_child(node):
     """Return the 'best' child according to number of visits."""
     visit_counts = [child.visits for child in node.children]
@@ -143,16 +226,27 @@ def best_child(node):
     return best
 
 
-def run_mcts(root_node, base_iter: int):
+def probabilistic_child(node):
+    """Return a child selected probabilistically based on policy."""
+    visit_counts = np.array([child.visits for child in node.children])
+    visit_probs = visit_counts / visit_counts.sum()
+    index_selected = np.random.choice(len(visit_probs), p=visit_probs)
+    # print(visit_probs)
+    # print(index_selected)
+    best = node.children[index_selected]
+    best.reset_mcts()
+    return best
+
+
+def run_mcts(root_node, num_iter: int):
     """Run the Monte Carlo Tree Search algorithm.
 
     :param root_node: The root node of the MCTS tree.
     :type root_node: GameNode
-    :param base_iter: The number of base iterations.
-    :type base_iter: int
+    :param num_iter: The number of base iterations.
+    :type num_iter: int
     """
     num_legal_moves = np.sum(root_node.action_space == 1)
-    num_iter = base_iter * num_legal_moves
     policy_counts = np.zeros_like(root_node.action_space)
     for iteration in range(num_iter):
         # 1) Selection
@@ -166,7 +260,7 @@ def run_mcts(root_node, base_iter: int):
         # 2) Expansion
         if not node.is_terminal and not node.is_fully_expanded:
             need_policy = True if node == root_node else False
-            node = expand_all_children(node)
+            node = expand_child(node)
             if need_policy:
                 policy_counts[node.action_index] += 1
 
@@ -178,16 +272,15 @@ def run_mcts(root_node, base_iter: int):
     return best_child(root_node)
 
 
-def run_neural_mcts(root_node, attacker_policy, defender_policy, value_function, device: str, base_iter: int):
+def run_neural_mcts(root_node, policy_function, value_function, device: str, base_iter: int):
     """Run the Monte Carlo Tree Search algorithm with deep learning guidance inspired by AlphaZero.
 
     :param root_node: The root node of the MCTS tree.
     :type root_node: GameNode
-    :param attacker_policy: The Pytorch policy network for the attacker.
-    :type value_function: nn.Module
-    :param defender_policy: The Pytorch policy network for the defender.
-    :type value_function: nn.Module
+    :param policy_function: The Pytorch policy network.
+    :type policy_function: nn.Module
     :param value_function: The Pytorch value network.
+    :type value_function: nn.Module
     :type value_function: nn.Module
     :param device: The device on which the value_function should be placed.
     :type device: str
@@ -211,7 +304,7 @@ def run_neural_mcts(root_node, attacker_policy, defender_policy, value_function,
         if not node.is_terminal and not node.is_fully_expanded:
             need_policy = True if node == root_node else False
             node = expand_predict_all(node,
-                                      model=attacker_policy if node.player == 1 else defender_policy,
+                                      model=policy_function,
                                       device=device)
             if need_policy:
                 policy_counts[node.action_index] += 1
@@ -232,8 +325,101 @@ def run_neural_mcts(root_node, attacker_policy, defender_policy, value_function,
     root_node.policy = policy_counts
     root_node.legal_actions = root_node.action_space
 
-    next_node = best_child(root_node)
+    next_node = probabilistic_child(root_node)
     root_node.selected_action = next_node.action_index
     root_node.selected_action_prob = policy_counts[next_node.action_index] / num_iter
 
     return next_node
+
+
+def batch_neural_mcts(root_nodes,
+                      attacker_policy_function,
+                      defender_policy_function,
+                      value_function,
+                      device: str,
+                      num_iters: int,
+                      ):
+    """Run the Monte Carlo Tree Search algorithm with deep learning guidance inspired by AlphaZero.
+
+    :param root_nodes: The root node of the MCTS tree.
+    :type root_nodes: List[GameNode]
+    :param attacker_policy_function: The attacker Pytorch policy network.
+    :type attacker_policy_function: nn.Module
+    :param defender_policy_function: The defender Pytorch policy network.
+    :type defender_policy_function: nn.Module
+    :param value_function: The Pytorch value network.
+    :type value_function: nn.Module
+    :param device: The device on which the value_function should be placed.
+    :type device: str
+    :param num_iters: The number of MCTS iterations.
+    :type num_iters: int
+    """
+
+    attacker_policy_function.eval()
+    defender_policy_function.eval()
+    value_function.eval()
+
+    batch_policy_counts = np.zeros((len(root_nodes), len(root_nodes[0].action_space)))
+    #print(batch_policy_counts.shape)
+
+    for iteration in range(num_iters):
+
+        # 1) Selection
+        # Make a list that will contain the selected node from each game
+        selected_nodes = []
+
+        # For every game root node, run selection as normal
+        for i, root_node in enumerate(root_nodes):
+            node = root_node
+            while not node.is_terminal and node.is_fully_expanded:
+                need_policy = True if node == root_node else False
+                node = select_node(node, func=PUCT)
+                if need_policy:
+                    # Update the policy counts as usual, but be aware of batch number
+                    batch_policy_counts[i, node.action_index] += 1
+            selected_nodes.append(node)
+
+        # 2) Expansion
+        # Make a list of nodes that need expansion and prediction
+        expansion_queue = []
+        node_info = []
+        for i, node in enumerate(selected_nodes):
+            if not node.is_terminal and not node.is_fully_expanded:
+                need_policy = True if node == root_nodes[i] else False
+                expansion_queue.append(node)
+                node_info.append((i, need_policy))
+
+        # If there are any nodes that needed to be expanded, expand them now and selected a child
+        if expansion_queue:
+            choices = batch_predict_all(expansion_queue, model0=defender_policy_function, model1=attacker_policy_function, device=device)
+            # TODO This needs to be thoroughly tested
+            for i, (idx, need_policy) in enumerate(node_info):
+                selected_nodes[idx] = choices[i]
+                if need_policy:
+                    batch_policy_counts[idx, selected_nodes[idx].action_index] += 1
+
+        # 3) Simulation and Backpropagation
+        batch_pseudo_rollout(selected_nodes, model=value_function, device=device)
+
+    # Assign some finalized attributes to the root_nodes before returning the next node selections.
+    player = np.array([node.player for node in root_nodes])
+    state = np.array([node.board.flatten() for node in root_nodes])
+    state_tensor = torch.tensor(state).float().to(device)
+    player_tensor = torch.tensor(player).float().unsqueeze(1).to(device)
+    with torch.no_grad():
+        value_preds = value_function(state_tensor, player_tensor).squeeze(1).cpu()
+
+    next_nodes = []
+    for i, root_node in enumerate(root_nodes):
+        root_node.value_estimate = value_preds[i].item()
+        root_node.policy = batch_policy_counts[i, :]
+        root_node.legal_actions = root_node.action_space
+        #print(f"root_node is terminal: {root_node.is_terminal}")
+
+        next_node = probabilistic_child(root_node)
+        root_node.selected_action = next_node.action_index
+        root_node.selected_action_prob = batch_policy_counts[i, next_node.action_index] / num_iters
+
+        next_nodes.append(next_node)
+
+    return next_nodes
