@@ -8,55 +8,15 @@ from input import identify_clicked_cell, convert_clicks_to_action
 import time
 from ai import *
 
-
-class RandomSelfPlay:
-    def __init__(self,
-                 attacker=None,
-                 defender=None,
-                 device='cpu',
-                 uid=0,
-                 ):
-        self.uid = uid
-        self.game = GameNode()
-        self.device = device
-        if attacker is None:
-            self.attacker = ai.RandomAI(player=1)
-        else:
-            self.attacker = attacker.to(self.device)
-        if defender is None:
-            self.defender = ai.RandomAI(player=0)
-        else:
-            self.defender = defender.to(self.device)
-
-    def play(self):
-        while self.game.winner == -1:
-            action_space = self.game.action_space
-
-            if self.game.player == 1:
-                action_selected, prob = self.attacker.select_action(self.game.board,
-                                                                    action_space,
-                                                                    device=self.device)
-                _ = self.defender.predict_value(self.game.board, device=self.device)
-            elif self.game.player == 0:
-                action_selected, prob = self.defender.select_action(self.game.board,
-                                                                    action_space,
-                                                                    device=self.device)
-                _ = self.attacker.predict_value(self.game.board, device=self.device)
-            else:
-                raise Exception("Unknown player")
-            self.game = self.game.step(action_selected)
-
-        return self.game
-
-
 class MCTSSelfPlay:
     """An episode designed to test and debug MCTS or generating data for network training."""
-    def __init__(self, base_iter, show=False, board=None):
+
+    def __init__(self, num_iter, show=False, board=None):
         if board is None:
             self.game = GameNode()
         else:
             self.game = GameNode(board=board)
-        self.base_iter = base_iter
+        self.num_iter = num_iter
         self.show = show
 
     def play(self):
@@ -65,60 +25,26 @@ class MCTSSelfPlay:
             display = graphics.initialize()
             graphics.refresh(self.game.board, display)
 
+        turns = 1
         while not self.game.is_terminal:
-            self.game = mcts.run_mcts(self.game, base_iter=self.base_iter)
+            self.game = mcts.run_mcts(self.game, num_iter=self.num_iter)
             if self.show:
                 graphics.refresh(self.game.board, display)
                 time.sleep(0.5)
+            turns += 1
 
-        return self.game
-
-
-class MCTSVRandom:
-    def __init__(self, base_iter, show=False, board=None):
-        if board is None:
-            self.game = GameNode()
-        else:
-            self.game = GameNode(board=board)
-        self.base_iter = base_iter
-        self.show = show
-        self.attacker = ai.RandomAI(player=1)
-        self.defender = "MCTS"
-        self.device = 'cpu'
-
-    def play(self):
-        """Play the game until termination."""
-        if self.show:
-            display = graphics.initialize()
-            graphics.refresh(self.game.board, display)
-
-        while not self.game.is_terminal:
-
-            if self.game.player == 1:
-                action_space = self.game.action_space
-                action_selected, prob = self.attacker.select_action(self.game.board,
-                                                                    action_space,
-                                                                    device=self.device)
-                _ = self.attacker.predict_value(self.game.board, device=self.device)
-                self.game = self.game.step(int(action_selected))
-
-            elif self.game.player == 0:
-                self.game = mcts.run_mcts(self.game, base_iter=self.base_iter)
-            else:
-                raise Exception("Unknown player")
-
-            if self.show:
-                graphics.refresh(self.game.board, display)
-                time.sleep(0.5)
+            if turns >= 100:
+                return 'stall'
 
         return self.game
 
 
 class HumanVMCTS:
     """A game in which a human player will play against an MCTS-based AI."""
-    def __init__(self, base_iter=10, human=1):
+
+    def __init__(self, num_iter=10, human=1):
         self.game = GameNode()
-        self.base_iter = base_iter
+        self.num_iter = num_iter
         self.human = human
         self.piece_to_player = {0: -1,
                                 4: -1,
@@ -208,7 +134,7 @@ class HumanVMCTS:
 
             # AI's turn
             else:
-                self.game = mcts.run_mcts(self.game, base_iter=self.base_iter)
+                self.game = mcts.run_mcts(self.game, num_iter=self.num_iter)
 
             # Update the display
             graphics.refresh(self.game.board, display)
@@ -219,12 +145,13 @@ class HumanVMCTS:
 
 class MCTSVDeepAgent:
     """An episode designed to test and debug deep RL agents."""
-    def __init__(self, base_iter, show=False, board=None, deep_player=1):
+
+    def __init__(self, num_iter, show=False, board=None, deep_player=0):
         if board is None:
             self.game = GameNode()
         else:
             self.game = GameNode(board=board)
-        self.base_iter = base_iter
+        self.num_iter = num_iter
         self.show = show
         self.deep_player = deep_player
         if deep_player == 1:
@@ -247,73 +174,28 @@ class MCTSVDeepAgent:
                 action = torch.argmax(self.model.predict_probs(game_state.to('cuda'), action_space.to('cuda'))).item()
                 self.game = self.game.step(action)
             else:
-                self.game = mcts.run_mcts(self.game, base_iter=self.base_iter)
+                self.game = mcts.run_mcts(self.game, num_iter=self.num_iter)
             if self.show:
                 graphics.refresh(self.game.board, display)
                 time.sleep(0.5)
-
-        return self.game
-
-
-class DeepSelfPlay:
-    """An episode designed to test and debug deep RL agents."""
-    def __init__(self, show=False, board=None):
-        if board is None:
-            self.game = GameNode()
-        else:
-            self.game = GameNode(board=board)
-        self.show = show
-        self.attacker = load_agent(player='attacker')
-        self.defender = load_agent(player='defender')
-        self.turn = 0
-
-    def play(self):
-        """Play the game until termination."""
-        if self.show:
-            display = graphics.initialize()
-            graphics.refresh(self.game.board, display)
-
-        while not self.game.is_terminal:
-            self.turn += 1
-            if self.game.player == 1:
-                game_state = self.game.board.flatten()
-                game_state = torch.Tensor(game_state).float().unsqueeze(0)
-                action_space = self.game.action_space
-                action_space = torch.Tensor(action_space).float().unsqueeze(0)
-                action = torch.argmax(self.attacker.predict_probs(game_state.to('cuda'), action_space.to('cuda'))).item()
-                self.game = self.game.step(action)
-            else:
-                game_state = self.game.board.flatten()
-                game_state = torch.Tensor(game_state).float().unsqueeze(0)
-                action_space = self.game.action_space
-                action_space = torch.Tensor(action_space).float().unsqueeze(0)
-                action = torch.argmax(self.defender.predict_probs(game_state.to('cuda'), action_space.to('cuda'))).item()
-                self.game = self.game.step(action)
-            if self.show:
-                graphics.refresh(self.game.board, display)
-                time.sleep(0.5)
-
-            # Draw if the game gets stuck
-            if self.turn > 100:
-                self.game.winner = -1
-                return self.game
 
         return self.game
 
 
 class NeuralMCTSSelfPlay:
     """An episode designed to test and debug MCTS or generating data for network training."""
-    def __init__(self, base_iter, show=False, board=None):
+
+    def __init__(self, num_iter, show=False, board=None):
         if board is None:
             self.game = GameNode()
         else:
             self.game = GameNode(board=board)
-        self.base_iter = base_iter
+        self.num_iter = num_iter
         self.value_function = ai.load_value_function()
         self.show = show
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.turn = 0
-        #print(f"Running Neural MCTS game on {self.device}.")
+        self.policy_function = ai.load_agent('attacker')
 
     def play(self):
         """Play the game until termination."""
@@ -324,11 +206,16 @@ class NeuralMCTSSelfPlay:
         while not self.game.is_terminal:
             self.turn += 1
 
-            self.game = mcts.run_neural_mcts(self.game,
-                                             value_function=self.value_function,
-                                             device=self.device,
-                                             base_iter=self.base_iter,
-                                             )
+            if self.game.player == 1:
+                self.game = mcts.run_neural_mcts(self.game,
+                                                 policy_function=self.policy_function,
+                                                 value_function=self.value_function,
+                                                 device=self.device,
+                                                 base_iter=self.num_iter,
+                                                 )
+            else:
+                self.game = mcts.run_mcts(self.game, num_iter=self.num_iter)
+
             if self.show:
                 graphics.refresh(self.game.board, display)
                 time.sleep(0.5)
@@ -339,3 +226,53 @@ class NeuralMCTSSelfPlay:
                 return self.game
 
         return self.game
+
+
+class BatchNeuralSelfPlay:
+    """Generate bulk Deep RL gameplay data."""
+
+    def __init__(self, num_iters, num_games, show=False):
+
+        self.games = [GameNode() for _ in range(num_games)]
+        self.num_iters = num_iters
+        self.show = show
+        self.turn = 0
+
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.attacker_policy_function = ai.load_agent('attacker')
+        self.defender_policy_function = ai.load_agent('defender')
+        self.value_function = ai.load_value_function()
+
+    def play(self):
+        """Play the games until they all terminate."""
+        if self.show:
+            display = graphics.initialize()
+            graphics.refresh(self.games[0].board, display)
+
+        live_games = [game for game in self.games if not game.is_terminal]
+        terminal_games = []
+        while live_games:
+            self.turn += 1
+
+            live_games = mcts.batch_neural_mcts(live_games,
+                                                attacker_policy_function=self.attacker_policy_function,
+                                                defender_policy_function=self.defender_policy_function,
+                                                value_function=self.value_function,
+                                                device=self.device,
+                                                num_iters=self.num_iters,
+                                                )
+            if self.show:
+                graphics.refresh(live_games[0].board, display)
+                time.sleep(1.0)
+
+            for game in live_games:
+                if game.is_terminal:
+                    terminal_games.append(game)
+            live_games = [game for game in live_games if not game.is_terminal]
+
+            # Draw if the games get stuck
+            if self.turn > 100:
+                for game in live_games:
+                    game.winner = -1
+
+        return terminal_games
