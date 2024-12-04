@@ -146,7 +146,7 @@ class HumanVMCTS:
 class HumanVNeural:
     """A game in which a human player will play against a Deep RL-based AI."""
 
-    def __init__(self, num_iter=10, human=1):
+    def __init__(self, num_iter=100, human=1, set=0):
         self.game = GameNode()
         self.num_iter = num_iter
         self.human = human
@@ -156,8 +156,8 @@ class HumanVNeural:
                                 2: 0,
                                 3: 0,
                                 }
-        self.policy_function = ai.load_agent('defender_cp0', player=0)
-        self.value_function = ai.load_value_function('value_cp0')
+        self.policy_function = ai.load_agent(f'defender_cp{set}', player=0)
+        self.value_function = ai.load_value_function(f'value_cp{set}')
         print(f"Human is playing as {'attacker' if human == 1 else 'defender'}.")
 
     def play(self):
@@ -327,7 +327,7 @@ class BatchNeuralSelfPlay:
                                                 )
             if self.show:
                 graphics.refresh(live_games[0].board, display)
-                time.sleep(1.0)
+                time.sleep(2.0)
 
             for game in live_games:
                 if game.is_terminal:

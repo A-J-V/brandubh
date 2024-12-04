@@ -152,15 +152,16 @@ class NeuralGameRecorder:
 
 class PPOBrandubhDataset(Dataset):
 
-    def __init__(self, data_path, player=1):
+    def __init__(self, data_paths, player=1):
         df_list = []
         print("Loading dataset...")
-        for file in (os.listdir(data_path)):
-            record_path = os.path.join(data_path, file)
-            df_list.append(
-                pd.read_csv(
-                    record_path,
-                    on_bad_lines='skip'))
+        for data_path in data_paths:
+            for file in (os.listdir(data_path)):
+                record_path = os.path.join(data_path, file)
+                df_list.append(
+                    pd.read_csv(
+                        record_path,
+                        on_bad_lines='skip'))
 
         self.player = player
         self.data = pd.concat(df_list, ignore_index=True)
@@ -192,15 +193,16 @@ class PPOBrandubhDataset(Dataset):
 
 class ValueBrandubhDataset(Dataset):
 
-    def __init__(self, data_path):
+    def __init__(self, data_paths):
         df_list = []
         print("Loading dataset...")
-        for file in (os.listdir(data_path)):
-            record_path = os.path.join(data_path, file)
-            df_list.append(
-                pd.read_csv(
-                    record_path,
-                    on_bad_lines='skip'))
+        for data_path in data_paths:
+            for file in (os.listdir(data_path)):
+                record_path = os.path.join(data_path, file)
+                df_list.append(
+                    pd.read_csv(
+                        record_path,
+                        on_bad_lines='skip'))
 
         self.data = pd.concat(df_list, ignore_index=True)
         self.data = self.data.loc[self.data['winner'] != -1]
@@ -307,7 +309,7 @@ def train_value(value_network, loss_fn, device, dataloader, optimizer):
 def train_all(attacker_path: str,
               defender_path: str,
               value_path: str,
-              data_path: str,
+              data_paths: list,
               checkpoint_path: str,
               epochs: int,
               iteration: int,
@@ -321,8 +323,8 @@ def train_all(attacker_path: str,
     :type defender_path: str
     :param value_path: The path to the neural network for the value function
     :type value_path: str
-    :param data_path: The path to the data to use for this training
-    :type data_path: str
+    :param data_paths: The path to the data to use for this training
+    :type data_paths: str
     :param checkpoint_path: The path to the folder to save network checkpoints to
     :type checkpoint_path: str
     :param epochs: The number of epochs to train over the most recently generated data
@@ -335,38 +337,38 @@ def train_all(attacker_path: str,
 
     print("Running a training update...")
 
-    attacker_policy_network = load_agent(attacker_path, player=1)
-    defender_policy_network = load_agent(defender_path, player=0)
-    value_network = load_value_function(value_path)
+    attacker_policy_network = load_agent(attacker_path, dropout=0.2, player=1)
+    defender_policy_network = load_agent(defender_path, dropout=0.2, player=0)
+    value_network = load_value_function(value_path, dropout=0.2)
 
-    attacker_optimizer = torch.optim.Adam(attacker_policy_network.parameters(), lr=0.0002,)
-    defender_optimizer = torch.optim.Adam(defender_policy_network.parameters(), lr=0.0002, )
-    value_optimizer = torch.optim.Adam(value_network.parameters(), lr=0.0002, )
+    attacker_optimizer = torch.optim.Adam(attacker_policy_network.parameters(), lr=0.0001,)
+    defender_optimizer = torch.optim.Adam(defender_policy_network.parameters(), lr=0.0001, )
+    value_optimizer = torch.optim.Adam(value_network.parameters(), lr=0.0001, )
 
     # Step 1: Load all datasets
-    attacker_dataset = PPOBrandubhDataset(data_path=data_path,
+    attacker_dataset = PPOBrandubhDataset(data_paths=data_paths,
                                           player=1,
                                           )
-    defender_dataset = PPOBrandubhDataset(data_path=data_path,
+    defender_dataset = PPOBrandubhDataset(data_paths=data_paths,
                                           player=0,
                                           )
-    value_dataset = ValueBrandubhDataset(data_path=data_path)
+    value_dataset = ValueBrandubhDataset(data_paths=data_paths)
 
     # Step 2: Prepare all dataloaders
     attacker_loader = DataLoader(attacker_dataset,
-                                 batch_size=1024,
+                                 batch_size=1500,
                                  shuffle=True,
                                  )
     defender_loader = DataLoader(defender_dataset,
-                                 batch_size=1024,
+                                 batch_size=1500,
                                  shuffle=True,
                                  )
     value_loader = DataLoader(value_dataset,
-                              batch_size=1024,
+                              batch_size=1500,
                               shuffle=True,
                               )
 
-    policy_loss_fn = PPOLoss(c=0.025)
+    policy_loss_fn = PPOLoss(c=0.03)
     value_loss_fn = nn.BCELoss()
 
     # Step 3: Train both policy networks and the value network

@@ -158,18 +158,18 @@ class ValueFunction(nn.Module):
         return output
 
 
-def load_value_function(value_path: str):
+def load_value_function(value_path: str, dropout: float =0.0):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = ValueFunction(embedding_dim=24)
+    model = ValueFunction(dropout=dropout, embedding_dim=24)
     model.load_state_dict(torch.load(f"/home/alexander/Data/brandubh/checkpoints/{value_path}.pth"))
     model = model.to(device)
     model.eval()
     return model
 
 
-def load_agent(model_path: str, player: int):
+def load_agent(model_path: str, player: int, dropout: float = 0.0,):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = AttentionAgent(player, embedding_dim=24)
+    model = AttentionAgent(player, dropout=dropout, embedding_dim=24)
     model.load_state_dict(torch.load(f"/home/alexander/Data/brandubh/checkpoints/{model_path}.pth"))
     model = model.to(device)
     model.eval()

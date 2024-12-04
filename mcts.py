@@ -275,6 +275,9 @@ def run_mcts(root_node, num_iter: int):
 def run_neural_mcts(root_node, policy_function, value_function, device: str, base_iter: int):
     """Run the Monte Carlo Tree Search algorithm with deep learning guidance inspired by AlphaZero.
 
+    NOTE: This does NOT probabilistic select the next node, so it is not suited for generated training data!
+    This is the function to use for neural search in deployment!
+
     :param root_node: The root node of the MCTS tree.
     :type root_node: GameNode
     :param policy_function: The Pytorch policy network.
@@ -325,7 +328,7 @@ def run_neural_mcts(root_node, policy_function, value_function, device: str, bas
     root_node.policy = policy_counts
     root_node.legal_actions = root_node.action_space
 
-    next_node = probabilistic_child(root_node)
+    next_node = best_child(root_node)
     root_node.selected_action = next_node.action_index
     root_node.selected_action_prob = policy_counts[next_node.action_index] / num_iter
 
