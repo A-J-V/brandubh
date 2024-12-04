@@ -83,11 +83,23 @@ class AttentionAgent(nn.Module):
 
         return policy
 
-    def predict_probs(self, x, action_space):
+    def predict_probs(self, x, action_space, temperature = 1.0):
+        # Forward pass to compute logits
         policy_pred = self.forward(x)
+
+        # Confirm that the shapes are as expected
         assert policy_pred.shape == action_space.shape
-        probs = torch.softmax(policy_pred - policy_pred.max(), dim=1)
+
+        # Apply temperature adjustment to logits
+        adjusted_logits = policy_pred / temperature
+
+        # Compute softmax probabilities
+        probs = torch.softmax(adjusted_logits - adjusted_logits.max(), dim=1)
+
+        # Mask illegal moves
         legal_probs = torch.where(action_space == 1, probs, torch.zeros_like(probs))
+
+        # Normalize to ensure probabilities sum to 1 for legal actions
         legal_probs /= torch.sum(legal_probs, dim=1, keepdim=True)
 
         return legal_probs

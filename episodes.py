@@ -295,12 +295,13 @@ class MCTSVDeepAgent:
 class BatchNeuralSelfPlay:
     """Generate bulk Deep RL gameplay data."""
 
-    def __init__(self, num_iters, num_games, attacker_path, defender_path, value_path, show=False):
+    def __init__(self, num_iters, num_games, attacker_path, defender_path, value_path, show=False, temperature=1.0):
 
         self.games = [GameNode() for _ in range(num_games)]
         self.num_iters = num_iters
         self.show = show
         self.turn = 0
+        self.temperature = temperature
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.attacker_policy_function = ai.load_agent(attacker_path, player=1)
@@ -324,6 +325,7 @@ class BatchNeuralSelfPlay:
                                                 value_function=self.value_function,
                                                 device=self.device,
                                                 num_iters=self.num_iters,
+                                                temperature=self.temperature,
                                                 )
             if self.show:
                 graphics.refresh(live_games[0].board, display)

@@ -88,7 +88,6 @@ def expand_predict_all(node, model: torch.nn.Module, device: str):
 
 def batch_predict_all(nodes, model0: torch.nn.Module, model1: torch.nn.Module, device: str):
     """Expand all child nodes and run batch inference to assign priors to all."""
-    #print(f"len of nodes passed to batch_predict_all: {len(nodes)}")
 
     # Separate nodes based on player
     indices0, indices1 = [], []
@@ -110,11 +109,8 @@ def batch_predict_all(nodes, model0: torch.nn.Module, model1: torch.nn.Module, d
         action_tensor0 = torch.tensor(action_space0).float().to(device)
         state0 = np.array([node.board.flatten() for node in nodes0])
         state_tensor0 = torch.tensor(state0).float().to(device)
-        #print("action_tensor0 shape:", action_tensor0.shape)
-        #print("state_tensor0 shape:", state_tensor0.shape)
         with torch.no_grad():
             pred_prob0 = model0.predict_probs(state_tensor0, action_tensor0).cpu().numpy()
-            #print("pred_prob0 shape:", pred_prob0.shape)
         for i, idx in enumerate(indices0):
             pred_prob_list[idx] = pred_prob0[i]
 
@@ -124,11 +120,8 @@ def batch_predict_all(nodes, model0: torch.nn.Module, model1: torch.nn.Module, d
         action_tensor1 = torch.tensor(action_space1).float().to(device)
         state1 = np.array([node.board.flatten() for node in nodes1])
         state_tensor1 = torch.tensor(state1).float().to(device)
-        #print("action_tensor1 shape:", action_tensor1.shape)
-        #print("state_tensor1 shape:", state_tensor1.shape)
         with torch.no_grad():
             pred_prob1 = model1.predict_probs(state_tensor1, action_tensor1).cpu().numpy()
-            #print("pred_prob1 shape:", pred_prob1.shape)
         for i, idx in enumerate(indices1):
             pred_prob_list[idx] = pred_prob1[i]
 
@@ -226,15 +219,24 @@ def best_child(node):
     return best
 
 
-def probabilistic_child(node):
+def probabilistic_child(node, temperature=1.0):
     """Return a child selected probabilistically based on policy."""
     visit_counts = np.array([child.visits for child in node.children])
+
+    # Apply temperature adjustment
+    if temperature != 1.0:
+        adjusted_counts = visit_counts ** (1 / temperature)
+    else:
+        adjusted_counts = visit_counts
+
     visit_probs = visit_counts / visit_counts.sum()
+
     index_selected = np.random.choice(len(visit_probs), p=visit_probs)
-    # print(visit_probs)
-    # print(index_selected)
+
     best = node.children[index_selected]
+
     best.reset_mcts()
+
     return best
 
 
@@ -341,6 +343,7 @@ def batch_neural_mcts(root_nodes,
                       value_function,
                       device: str,
                       num_iters: int,
+                      temperature: float = 1.0,
                       ):
     """Run the Monte Carlo Tree Search algorithm with deep learning guidance inspired by AlphaZero.
 
@@ -356,6 +359,8 @@ def batch_neural_mcts(root_nodes,
     :type device: str
     :param num_iters: The number of MCTS iterations.
     :type num_iters: int
+    :param temperature: The temperature applied to action selection
+    :type temperature: float
     """
 
     attacker_policy_function.eval()
@@ -418,7 +423,7 @@ def batch_neural_mcts(root_nodes,
         root_node.policy = batch_policy_counts[i, :]
         root_node.legal_actions = root_node.action_space
 
-        next_node = probabilistic_child(root_node)
+        next_node = probabilistic_child(root_node, temperature=temperature)
         root_node.selected_action = next_node.action_index
         root_node.selected_action_prob = batch_policy_counts[i, next_node.action_index] / num_iters
 

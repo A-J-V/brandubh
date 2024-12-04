@@ -356,19 +356,19 @@ def train_all(attacker_path: str,
 
     # Step 2: Prepare all dataloaders
     attacker_loader = DataLoader(attacker_dataset,
-                                 batch_size=1500,
+                                 batch_size=2048,
                                  shuffle=True,
                                  )
     defender_loader = DataLoader(defender_dataset,
-                                 batch_size=1500,
+                                 batch_size=2048,
                                  shuffle=True,
                                  )
     value_loader = DataLoader(value_dataset,
-                              batch_size=1500,
+                              batch_size=2048,
                               shuffle=True,
                               )
 
-    policy_loss_fn = PPOLoss(c=0.03)
+    policy_loss_fn = PPOLoss(c=0.025)
     value_loss_fn = nn.BCELoss()
 
     # Step 3: Train both policy networks and the value network
