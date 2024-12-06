@@ -229,7 +229,7 @@ def probabilistic_child(node, temperature=1.0):
     else:
         adjusted_counts = visit_counts
 
-    visit_probs = visit_counts / visit_counts.sum()
+    visit_probs = adjusted_counts / adjusted_counts.sum()
 
     index_selected = np.random.choice(len(visit_probs), p=visit_probs)
 
@@ -344,6 +344,7 @@ def batch_neural_mcts(root_nodes,
                       device: str,
                       num_iters: int,
                       temperature: float = 1.0,
+                      deterministic: bool = False,
                       ):
     """Run the Monte Carlo Tree Search algorithm with deep learning guidance inspired by AlphaZero.
 
@@ -368,7 +369,6 @@ def batch_neural_mcts(root_nodes,
     value_function.eval()
 
     batch_policy_counts = np.zeros((len(root_nodes), len(root_nodes[0].action_space)))
-    #print(batch_policy_counts.shape)
 
     for iteration in range(num_iters):
 
@@ -423,7 +423,10 @@ def batch_neural_mcts(root_nodes,
         root_node.policy = batch_policy_counts[i, :]
         root_node.legal_actions = root_node.action_space
 
-        next_node = probabilistic_child(root_node, temperature=temperature)
+        if deterministic:
+            next_node = best_child(root_node)
+        else:
+            next_node = probabilistic_child(root_node, temperature=temperature)
         root_node.selected_action = next_node.action_index
         root_node.selected_action_prob = batch_policy_counts[i, next_node.action_index] / num_iters
 
