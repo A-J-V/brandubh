@@ -18,8 +18,6 @@ def generate_data(attacker_path: str,
         print(f"Generating data in iteration {iteration}")
     # Step 1: Set up a new folder to store the resulting data
     folder_path = output_path + f"/set_{iteration}"
-    if not os.path.exists(folder_path):
-        os.mkdir(folder_path)
 
     # Step 2: Generate and record a batch of game using neural self-play
     for chunk in range(chunks):
@@ -31,6 +29,7 @@ def generate_data(attacker_path: str,
                                                defender_path=defender_path,
                                                value_path=value_path,
                                                temperature=temperature,
+                                               deterministic=False,
                                                ).play()
         for i, winner in enumerate(winners):
             ai_utils.NeuralGameRecorder().extract(winner).record().to_csv(folder_path + f"/game_{process}-{chunk}-{i}.csv", index=False)
@@ -44,11 +43,12 @@ def bench(attacker_path: str,
     print("Benchmarking agents...")
 
     win_dict = {-1: 0, 0: 0, 1: 0}
-    winners = episodes.BatchNeuralSelfPlay(num_iters=100,
+    winners = episodes.BatchNeuralSelfPlay(num_iters=200,
                                            num_games=num_games,
                                            attacker_path=attacker_path,
                                            defender_path=defender_path,
                                            value_path=value_path,
+                                           deterministic=True,
                                            ).play()
     for winner in winners:
         win_dict[winner.winner] += 1
