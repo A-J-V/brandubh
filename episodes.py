@@ -1,5 +1,6 @@
 import ai
 from core import *
+import gc
 from math import isnan
 import mcts
 import graphics
@@ -265,9 +266,10 @@ class MCTSVDeepAgent:
         self.show = show
         self.deep_player = deep_player
         if deep_player == 1:
-            self.model = load_agent(model='attacker')
+            self.policy_function = load_agent(model_path='attacker_cp27', player=1)
         else:
-            self.model = load_agent(model='defender')
+            self.policy_function = load_agent(model_path='defender_cp27', player=0)
+        self.value_function = load_value_function(value_path='value_cp27')
 
     def play(self):
         """Play the game until termination."""
@@ -277,12 +279,11 @@ class MCTSVDeepAgent:
 
         while not self.game.is_terminal:
             if self.game.player == self.deep_player:
-                game_state = self.game.board.flatten()
-                game_state = torch.Tensor(game_state).float().unsqueeze(0)
-                action_space = self.game.action_space
-                action_space = torch.Tensor(action_space).float().unsqueeze(0)
-                action = torch.argmax(self.model.predict_probs(game_state.to('cuda'), action_space.to('cuda'))).item()
-                self.game = self.game.step(action)
+                self.game = mcts.run_neural_mcts(self.game,
+                                                 policy_function=self.policy_function,
+                                                 value_function=self.value_function,
+                                                 device='cuda',
+                                                 base_iter=self.num_iter)
             else:
                 self.game = mcts.run_mcts(self.game, num_iter=self.num_iter)
             if self.show:
@@ -295,13 +296,23 @@ class MCTSVDeepAgent:
 class BatchNeuralSelfPlay:
     """Generate bulk Deep RL gameplay data."""
 
-    def __init__(self, num_iters, num_games, attacker_path, defender_path, value_path, show=False, temperature=1.0):
+    def __init__(self,
+                 num_iters,
+                 num_games,
+                 attacker_path,
+                 defender_path,
+                 value_path,
+                 show=False,
+                 temperature=1.0,
+                 deterministic=False,
+                 ):
 
         self.games = [GameNode() for _ in range(num_games)]
         self.num_iters = num_iters
         self.show = show
         self.turn = 0
         self.temperature = temperature
+        self.deterministic = deterministic
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.attacker_policy_function = ai.load_agent(attacker_path, player=1)
@@ -326,15 +337,19 @@ class BatchNeuralSelfPlay:
                                                 device=self.device,
                                                 num_iters=self.num_iters,
                                                 temperature=self.temperature,
+                                                deterministic=self.deterministic,
                                                 )
             if self.show:
                 graphics.refresh(live_games[0].board, display)
+                print(live_games[0].board)
                 time.sleep(2.0)
 
             for game in live_games:
                 if game.is_terminal:
                     terminal_games.append(game)
             live_games = [game for game in live_games if not game.is_terminal]
+
+            gc.collect()
 
             # Draw if the games get stuck
             if self.turn > 100:
