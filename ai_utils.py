@@ -84,6 +84,7 @@ class NeuralGameRecorder:
                      v_est_next: np.ndarray,
                      player: int,
                      winner: int,
+                     all_moves: np.ndarray,
                      ) -> np.ndarray:
         """Calculate the temporal difference error for the game from a given perspective."""
         rewards = np.zeros_like(v_est)
@@ -95,17 +96,25 @@ class NeuralGameRecorder:
         # Confirm that the terminal node doesn't have any future value estimated.
         v_est_next[-1] = 0
         td_error = v_est_next - v_est + rewards
-        return td_error
+
+        # Insert np.nan for the other player's turns
+        full_td_error = np.full(len(all_moves), np.nan)  # Initialize full-sized array with np.nan
+        full_td_error[all_moves == player] = td_error  # Fill in TD errors for the current player
+
+        return full_td_error
 
     @staticmethod
     def calculate_GAE(td_error, gamma=0.99, lambda_=0.90):
-        """Calculate the Generalized Advantage Estimate."""
-        gae = []
+        """Calculate the Generalized Advantage Estimate with handling for NaN values."""
+        gae = np.full(len(td_error), np.nan)  # Initialize GAE with NaN values
         gae_t = 0
+
         for t in reversed(range(len(td_error))):
-            delta = td_error.iloc[t]
-            gae_t = delta + gamma * lambda_ * gae_t
-            gae.insert(0, gae_t)
+            delta = td_error[t]
+            if not np.isnan(delta):  # Only calculate GAE for valid entries
+                gae_t = delta + gamma * lambda_ * gae_t
+                gae[t] = gae_t  # Store the calculated GAE for valid entries
+
         return gae
 
     def record(self):
@@ -133,16 +142,18 @@ class NeuralGameRecorder:
         game_record['terminal'] = 0
         game_record.iloc[-1, game_record.columns.get_loc('terminal')] = 1
         game_record['v_est'] = self.value_estimate
-        game_record['v_est_next'] = game_record['v_est'].shift(-1, fill_value=0)
-        game_record['attacker_td_error'] = self.get_td_error(game_record['v_est'].values,
-                                                             game_record['v_est_next'].values,
+        game_record['v_est_next'] = game_record['v_est'].shift(-2, fill_value=0)
+        game_record['attacker_td_error'] = self.get_td_error(game_record[game_record['player' ] == 1]['v_est'].values,
+                                                             game_record[game_record['player' ] == 1]['v_est_next'].values,
                                                              player=1,
                                                              winner=self.winner,
+                                                             all_moves=game_record['player'].values,
                                                              )
-        game_record['defender_td_error'] = self.get_td_error(1 - game_record['v_est'].values,
-                                                             1 - game_record['v_est_next'].values,
+        game_record['defender_td_error'] = self.get_td_error(game_record[game_record['player' ] == 0]['v_est'].values,
+                                                             game_record[game_record['player' ] == 0]['v_est_next'].values,
                                                              player=0,
                                                              winner=self.winner,
+                                                             all_moves=game_record['player'].values,
                                                              )
         game_record['attacker_gae'] = self.calculate_GAE(game_record['attacker_td_error'])
         game_record['defender_gae'] = self.calculate_GAE(game_record['defender_td_error'])
@@ -337,9 +348,9 @@ def train_all(attacker_path: str,
 
     print("Running a training update...")
 
-    attacker_policy_network = load_agent(attacker_path, dropout=0.2, player=1)
-    defender_policy_network = load_agent(defender_path, dropout=0.2, player=0)
-    value_network = load_value_function(value_path, dropout=0.2)
+    attacker_policy_network = load_agent(attacker_path, dropout=0.1, player=1)
+    defender_policy_network = load_agent(defender_path, dropout=0.1, player=0)
+    value_network = load_value_function(value_path, dropout=0.0)
 
     attacker_optimizer = torch.optim.Adam(attacker_policy_network.parameters(), lr=0.0001,)
     defender_optimizer = torch.optim.Adam(defender_policy_network.parameters(), lr=0.0001, )

@@ -156,8 +156,8 @@ class ValueFunction(nn.Module):
 
         x = self.embedding(x)
 
-        x = x + self.position_tensor1
         player = player.view(batch_size, 1, 1)
+        x = x + (self.position_tensor1 * (1 - player))
         x = x + (self.position_tensor2 * player)
 
         x = self.attn(x)
