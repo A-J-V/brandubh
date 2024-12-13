@@ -39,16 +39,20 @@ def bench(attacker_path: str,
           defender_path: str,
           value_path: str,
           num_games: int,
+          num_iters: int,
+          deterministic: bool = True,
+          temperature: float = 1.0,
           ):
     print("Benchmarking agents...")
 
     win_dict = {-1: 0, 0: 0, 1: 0}
-    winners = episodes.BatchNeuralSelfPlay(num_iters=200,
+    winners = episodes.BatchNeuralSelfPlay(num_iters=num_iters,
                                            num_games=num_games,
                                            attacker_path=attacker_path,
                                            defender_path=defender_path,
                                            value_path=value_path,
-                                           deterministic=True,
+                                           deterministic=deterministic,
+                                           temperature=temperature,
                                            ).play()
     for winner in winners:
         win_dict[winner.winner] += 1
