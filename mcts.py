@@ -3,6 +3,15 @@ import random
 import torch
 from typing import Callable
 
+class DummyNode:
+    __slots__ = ['prior', 'action', 'parent', 'visits']
+
+    def __init__(self, prior: float, action: int, parent):
+        self.prior = prior
+        self.action = action
+        self.parent = parent
+        self.visits = 0
+
 
 def argmax(lst: list):
     """
@@ -32,14 +41,17 @@ def ucb1(node, c: float = 2.0):
         )
 
 
-def PUCT(node, c: float = 2.0):
+def PUCT(node, c: float = 1.25, max_prior: float = 0.95, min_prior: float = 0.05):
     """Calculate the PUCT value based on AlphaZero."""
-    if node.visits > 0:
+    if not isinstance(node, DummyNode) and node.visits > 0:
         q_value = node.value / node.visits
     else:
         q_value = 0
 
-    puct_value = q_value + c * node.prior * ((node.parent.visits ** 0.5) / (1 + node.visits))
+    # Clamp the prior between min_prior and max_prior
+    adjusted_prior = max(min(node.prior, max_prior), min_prior)
+
+    puct_value = q_value + c * adjusted_prior * ((node.parent.visits ** 0.5) / (1 + node.visits))
 
     return puct_value
 
@@ -47,11 +59,17 @@ def PUCT(node, c: float = 2.0):
 def select_node(node, func: Callable = ucb1):
     best_value = -float('inf')
     best_child = None
-    for child in node.children:
+    best_i = None
+    for i, child in enumerate(node.children):
         value = func(child)
         if value > best_value:
             best_value = value
             best_child = child
+            best_i = i
+        if isinstance(best_child, DummyNode):
+            best_dummy = node.children.pop(best_i)
+            best_child = node.step(best_dummy.action)
+            best_child.prior = best_dummy.prior
     return best_child
 
 
@@ -111,6 +129,8 @@ def batch_predict_all(nodes, model0: torch.nn.Module, model1: torch.nn.Module, d
         state_tensor0 = torch.tensor(state0).float().to(device)
         with torch.no_grad():
             pred_prob0 = model0.predict_probs(state_tensor0, action_tensor0).cpu().numpy()
+            # np.set_printoptions(threshold=5000, suppress=True, precision=3)
+            # print(pred_prob0[pred_prob0.nonzero()])
         for i, idx in enumerate(indices0):
             pred_prob_list[idx] = pred_prob0[i]
 
@@ -129,10 +149,22 @@ def batch_predict_all(nodes, model0: torch.nn.Module, model1: torch.nn.Module, d
     choices = []
     for i, node in enumerate(nodes):
         for action in node.unexpanded_children[:]:
-            child = node.step(action)
-            child.prior = pred_prob_list[i][action]
+            child = DummyNode(prior=pred_prob_list[i][action], action=action, parent=node)
+            node.children.append(child)
         node.unexpanded_children = []
-        choices.append(random.choice(node.children))
+        random_idx = random.randint(0, len(node.children) - 1)
+        picked_dummy = node.children.pop(random_idx)
+        picked_child = node.step(picked_dummy.action)
+        picked_child.prior = picked_dummy.prior
+        choices.append(picked_child)
+
+    # choices = []
+    # for i, node in enumerate(nodes):
+    #     for action in node.unexpanded_children[:]:
+    #         child = node.step(action)
+    #         child.prior = pred_prob_list[i][action]
+    #     node.unexpanded_children = []
+    #     choices.append(random.choice(node.children))
     return choices
 
 
@@ -397,7 +429,7 @@ def batch_neural_mcts(root_nodes,
                 expansion_queue.append(node)
                 node_info.append((i, need_policy))
 
-        # If there are any nodes that needed to be expanded, expand them now and selected a child
+        # If there are any nodes that needed to be expanded, expand them now and select a child
         if expansion_queue:
             choices = batch_predict_all(expansion_queue, model0=defender_policy_function, model1=attacker_policy_function, device=device)
 
