@@ -29,9 +29,9 @@ class TransformerBlock(nn.Module):
         self.dropout1 = nn.Dropout(dropout)
         self.norm1 = nn.LayerNorm(n_dims)
         self.mlp = nn.Sequential(
-            nn.Linear(n_dims, n_dims * 2),
+            nn.Linear(n_dims, n_dims * 4),
             nn.GELU(),
-            nn.Linear(n_dims * 2, n_dims),
+            nn.Linear(n_dims * 4, n_dims),
         )
         self.dropout2 = nn.Dropout(dropout)
         self.norm2 = nn.LayerNorm(n_dims)
@@ -62,6 +62,8 @@ class AttentionAgent(nn.Module):
 
         self.attn = TransformerBlock(embedding_dim, n_heads, dropout=dropout)
         self.attn2 = TransformerBlock(embedding_dim, n_heads, dropout=dropout)
+        self.attn3 = TransformerBlock(embedding_dim, n_heads, dropout=dropout)
+        self.attn4 = TransformerBlock(embedding_dim, n_heads, dropout=dropout)
 
         self.policy = nn.Linear(embedding_dim * board_size * board_size,
                                 24 * board_size * board_size)
@@ -71,12 +73,11 @@ class AttentionAgent(nn.Module):
         x = x.long().view(batch_size, -1)
 
         x = self.embedding(x)
-        # assert x.shape == self.position_tensor.shape, (
-        #     f"Input shape {x.shape} does not match position tensor shape {self.position_tensor.shape}"
-        # )
         x = x + self.position_tensor
         x = self.attn(x)
         x = self.attn2(x)
+        x = self.attn3(x)
+        x = self.attn4(x)
         x = x.view(x.size(0), -1)
 
         policy = self.policy(x)
@@ -144,6 +145,7 @@ class ValueFunction(nn.Module):
         self.attn = TransformerBlock(embedding_dim, n_heads, dropout=dropout)
         self.attn2 = TransformerBlock(embedding_dim, n_heads, dropout=dropout)
         self.attn3 = TransformerBlock(embedding_dim, n_heads, dropout=dropout)
+        self.attn4 = TransformerBlock(embedding_dim, n_heads, dropout=dropout)
 
         self.output = nn.Sequential(
             nn.Linear(embedding_dim * board_size * board_size, 1),
@@ -163,6 +165,7 @@ class ValueFunction(nn.Module):
         x = self.attn(x)
         x = self.attn2(x)
         x = self.attn3(x)
+        x = self.attn4(x)
         x = x.view(x.size(0), -1)
 
         output = self.output(x)
@@ -172,7 +175,7 @@ class ValueFunction(nn.Module):
 
 def load_value_function(value_path: str, dropout: float =0.0):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = ValueFunction(dropout=dropout, embedding_dim=24)
+    model = ValueFunction(dropout=dropout, embedding_dim=48)
     model.load_state_dict(torch.load(f"/home/alexander/Data/brandubh/checkpoints/{value_path}.pth"))
     model = model.to(device)
     model.eval()
@@ -181,7 +184,7 @@ def load_value_function(value_path: str, dropout: float =0.0):
 
 def load_agent(model_path: str, player: int, dropout: float = 0.0,):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = AttentionAgent(player, dropout=dropout, embedding_dim=24)
+    model = AttentionAgent(player, dropout=dropout, embedding_dim=48)
     model.load_state_dict(torch.load(f"/home/alexander/Data/brandubh/checkpoints/{model_path}.pth"))
     model = model.to(device)
     model.eval()
