@@ -147,9 +147,9 @@ class HumanVMCTS:
 class HumanVNeural:
     """A game in which a human player will play against a Deep RL-based AI."""
 
-    def __init__(self, num_iter=100, human=1, set=0):
+    def __init__(self, num_iters=100, human=1, version=0):
         self.game = GameNode()
-        self.num_iter = num_iter
+        self.num_iters = num_iters
         self.human = human
         self.piece_to_player = {0: -1,
                                 4: -1,
@@ -157,8 +157,10 @@ class HumanVNeural:
                                 2: 0,
                                 3: 0,
                                 }
-        self.policy_function = ai.load_agent(f'defender_cp{set}', player=0)
-        self.value_function = ai.load_value_function(f'value_cp{set}')
+        self.attacker_policy_function = ai.load_agent(f'attacker_cp{version}', player=1)
+        self.defender_policy_function = ai.load_agent(f'defender_cp{version}', player=1)
+        self.value_function = ai.load_value_function(f'value_cp{version}')
+        self.device = 'cuda'
         print(f"Human is playing as {'attacker' if human == 1 else 'defender'}.")
 
     def play(self):
@@ -241,11 +243,15 @@ class HumanVNeural:
 
             # AI's turn
             else:
-                self.game = mcts.run_neural_mcts(self.game,
-                                                 policy_function=self.policy_function,
-                                                 value_function=self.value_function,
-                                                 device='cuda',
-                                                 base_iter=100)
+                self.game = mcts.batch_neural_mcts([self.game],
+                                                   attacker_policy_function=self.attacker_policy_function,
+                                                   defender_policy_function=self.defender_policy_function,
+                                                   value_function=self.value_function,
+                                                   device=self.device,
+                                                   num_iters=self.num_iters,
+                                                   temperature=1.0,
+                                                   deterministic=True,
+                                                   )[0]
 
             # Update the display
             graphics.refresh(self.game.board, display)
@@ -352,7 +358,7 @@ class BatchNeuralSelfPlay:
             gc.collect()
 
             # Draw if the games get stuck
-            if self.turn > 100:
+            if self.turn > 25:
                 for game in live_games:
                     game.winner = -1
 
