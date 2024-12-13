@@ -235,7 +235,7 @@ class ValueBrandubhDataset(Dataset):
 
 
 class PPOLoss(nn.Module):
-    def __init__(self, e=0.2, c=None):
+    def __init__(self, e=0.1, c=None):
         super().__init__()
         self.e = e
         self.c = c
@@ -324,6 +324,8 @@ def train_all(attacker_path: str,
               checkpoint_path: str,
               epochs: int,
               iteration: int,
+              learning_rate: float = 0.00001,
+              entropy: float = 0.01,
               device: str = 'cuda',
               ):
     """Run a complete training iteration on all networks and checkpoint them
@@ -348,13 +350,13 @@ def train_all(attacker_path: str,
 
     print("Running a training update...")
 
-    attacker_policy_network = load_agent(attacker_path, dropout=0.1, player=1)
-    defender_policy_network = load_agent(defender_path, dropout=0.1, player=0)
-    value_network = load_value_function(value_path, dropout=0.0)
+    attacker_policy_network = load_agent(attacker_path, dropout=0.3, player=1)
+    defender_policy_network = load_agent(defender_path, dropout=0.3, player=0)
+    value_network = load_value_function(value_path, dropout=0.225)
 
-    attacker_optimizer = torch.optim.Adam(attacker_policy_network.parameters(), lr=0.0001,)
-    defender_optimizer = torch.optim.Adam(defender_policy_network.parameters(), lr=0.0001, )
-    value_optimizer = torch.optim.Adam(value_network.parameters(), lr=0.0001, )
+    attacker_optimizer = torch.optim.Adam(attacker_policy_network.parameters(), lr=learning_rate,)
+    defender_optimizer = torch.optim.Adam(defender_policy_network.parameters(), lr=learning_rate, )
+    value_optimizer = torch.optim.Adam(value_network.parameters(), lr=learning_rate, )
 
     # Step 1: Load all datasets
     attacker_dataset = PPOBrandubhDataset(data_paths=data_paths,
@@ -367,19 +369,19 @@ def train_all(attacker_path: str,
 
     # Step 2: Prepare all dataloaders
     attacker_loader = DataLoader(attacker_dataset,
-                                 batch_size=2048,
+                                 batch_size=4096,
                                  shuffle=True,
                                  )
     defender_loader = DataLoader(defender_dataset,
-                                 batch_size=2048,
+                                 batch_size=4096,
                                  shuffle=True,
                                  )
     value_loader = DataLoader(value_dataset,
-                              batch_size=2048,
+                              batch_size=4096,
                               shuffle=True,
                               )
 
-    policy_loss_fn = PPOLoss(c=0.025)
+    policy_loss_fn = PPOLoss(c=entropy)
     value_loss_fn = nn.BCELoss()
 
     # Step 3: Train both policy networks and the value network
